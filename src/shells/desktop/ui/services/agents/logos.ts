@@ -8,6 +8,7 @@ import cursorLogo from './logos/cursor.svg?url'
 import grokLogo from './logos/grok.svg?url'
 import kiroLogo from './logos/kiro.svg?url'
 import opencodeLogo from './logos/opencode.svg?url'
+import agyLogo from './logos/agy.svg?url'
 
 const AGENT_LOGOS: Record<AgentId, string> = {
   'claude-code': claudeLogo,
@@ -16,6 +17,7 @@ const AGENT_LOGOS: Record<AgentId, string> = {
   grok: grokLogo,
   kiro: kiroLogo,
   opencode: opencodeLogo,
+  agy: agyLogo,
 }
 
 /** Logo URL of an agent; null without one (callers show the panel's icon). */

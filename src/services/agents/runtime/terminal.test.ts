@@ -358,6 +358,10 @@ const TOOL_POSTS: Record<AgentId, { edit: (file: string) => Record<string, unkno
     edit: (file) => ({ type: 'message.part.updated', sessionID: 's', part: { type: 'tool', tool: 'write', callID: 'e', state: { status: 'completed', input: { filePath: file, content: 'after\n' }, metadata: {} } } }),
     shell: (command) => ({ type: 'message.part.updated', sessionID: 's', part: { type: 'tool', tool: 'bash', callID: 'b', state: { status: 'completed', input: { command, description: 'Run it' }, metadata: {} } } }),
   },
+  agy: {
+    edit: (file) => ({ hook_event_name: 'postToolUse', session_id: 's', tool_use_id: 'e', tool_name: 'write_file', tool_input: { Path: file, Content: 'after\n' }, tool_response: {} }),
+    shell: (command) => ({ hook_event_name: 'postToolUse', session_id: 's', tool_use_id: 'b', tool_name: 'run_command', tool_input: { CommandLine: command }, tool_response: {} }),
+  },
 }
 
 describe('terminal agents steps', () => {

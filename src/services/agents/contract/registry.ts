@@ -24,6 +24,7 @@ export type AgentId =
   | 'grok'
   | 'kiro'
   | 'opencode'
+  | 'agy'
 
 /** Where one agent reads project skills from, and how they are written.
  *  Cate follows the open Agent Skills standard (a `SKILL.md` folder), so an
@@ -213,6 +214,20 @@ export const AGENT_DEFS: Record<AgentId, AgentDef> = {
     promptContextHook: 'plain-text',
     promptGuidance: null,
     skills: folderSkills('kiro', ['.kiro', 'skills'], { nameMatchesDir: true }),
+  },
+  agy: {
+    id: 'agy',
+    displayName: 'Antigravity',
+    command: 'agy',
+    resume: { args: (sid) => ['--conversation', sid], fromSessionStart: true },
+    sessionStore: '.gemini/antigravity-cli/brain',
+    promptArgs: (prompt) => ['-i', prompt],
+    startArgs: [],
+    interruptKeys: ['ctrl-c'],
+    matchProcess: (n) => n === 'agy',
+    promptContextHook: null,
+    promptGuidance: null,
+    skills: folderSkills('agy', ['.agents', 'skills'], { nameMatchesDir: false }),
   },
 }
 

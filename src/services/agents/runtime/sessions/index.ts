@@ -5,6 +5,7 @@ import { cursorSessionStore } from './cursor'
 import { grokSessionStore } from './grok'
 import { kiroSessionStore } from './kiro'
 import { openCodeSessionStore } from './opencode'
+import { agySessionStore } from './agy'
 
 /** CLI-specific session persistence behind one exhaustive runtime lookup. */
 export const AGENT_SESSION_STORES: AgentSessionStores = {
@@ -14,6 +15,7 @@ export const AGENT_SESSION_STORES: AgentSessionStores = {
   grok: grokSessionStore,
   kiro: kiroSessionStore,
   opencode: openCodeSessionStore,
+  agy: agySessionStore,
 }
 
 export { createAgentTitleTracker } from './tracker'

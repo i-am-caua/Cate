@@ -933,6 +933,75 @@ const kiroSpec: AgentHookSpec = {
     : null,
 }
 
+const agySpec: AgentHookSpec = {
+  interrupt: { via: 'input' },
+  projectFiles: [
+    {
+      relPath: '.agents/hooks.json',
+      build: (existing, ctx) => {
+        const ours = () => ({
+          'cate-hook': {
+            SessionStart: [{ type: 'command', command: ctx.bridgeCommand }],
+            PreInvocation: [{ type: 'command', command: ctx.bridgeCommand }],
+            PostToolUse: [{ matcher: '.*', hooks: [{ type: 'command', command: ctx.bridgeCommand }] }],
+            Stop: [{ type: 'command', command: ctx.bridgeCommand }],
+          },
+        })
+        if (existing === null) return JSON.stringify(ours(), null, 2) + '\n'
+        let parsed: Record<string, unknown>
+        try {
+          parsed = JSON.parse(existing)
+          if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null
+        } catch {
+          return null
+        }
+        const out = JSON.stringify({ ...parsed, ...ours() }, null, 2) + '\n'
+        return out === existing ? null : out
+      },
+      strip: (existing) => {
+        let parsed: Record<string, unknown>
+        try {
+          parsed = JSON.parse(existing)
+          if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null
+        } catch {
+          return null
+        }
+        if (!parsed['cate-hook']) return null
+        delete parsed['cate-hook']
+        if (Object.keys(parsed).length === 0) return { delete: true }
+        return { content: JSON.stringify(parsed, null, 2) + '\n' }
+      },
+    },
+  ],
+  normalize: (p) => {
+    const sessionId = str(p.session_id) ?? str(p.sessionId) ?? str(p.conversation_id) ?? str(p.conversationId)
+    const base = {
+      sessionId,
+      cwd: str(p.cwd) ?? str(p.workspace) ?? undefined,
+      transcriptPath: str(p.transcriptPath) ?? str(p.transcript_path) ?? undefined,
+    }
+    const event = str(p.hook_event_name) ?? str(p.event)
+    switch (event) {
+      case 'sessionStart':
+      case 'SessionStart':
+      case 'session-start': return { kind: 'session-start', ...base }
+      case 'beforeSubmitPrompt':
+      case 'PreInvocation':
+      case 'turn-start': return { kind: 'turn-start', ...base }
+      case 'postToolUse':
+      case 'PostToolUse':
+      case 'turn-resume': return { kind: 'turn-resume', ...base }
+      case 'stop':
+      case 'Stop':
+      case 'turn-end': return { kind: 'turn-end', ...base }
+      case 'sessionEnd':
+      case 'session-end': return { kind: 'session-end', ...base }
+      default: return null
+    }
+  },
+  toolCall: () => null,
+}
+
 // ---------------------------------------------------------------------------
 // Registry + normalization entry point
 // ---------------------------------------------------------------------------
@@ -944,6 +1013,7 @@ export const AGENT_HOOK_SPECS: Record<AgentId, AgentHookSpec> = {
   grok: grokSpec,
   kiro: kiroSpec,
   opencode: opencodeSpec,
+  agy: agySpec,
 }
 
 /** Normalize one raw bridge-posted payload into the shared event, or null when

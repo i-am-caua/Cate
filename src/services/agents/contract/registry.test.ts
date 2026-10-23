@@ -27,6 +27,7 @@ describe('agent registry coverage', () => {
       grok: null,
       kiro: 'plain-text',
       opencode: 'endpoint',
+      agy: null,
     })
   })
 
@@ -58,7 +59,7 @@ describe('agent registry coverage', () => {
   // restatement of the type.
   test('persisted SkillTargetId values never drift', () => {
     const expected: SkillTargetId[] = [
-      'claude-code', 'opencode', 'codex', 'cursor', 'grok', 'kiro',
+      'claude-code', 'opencode', 'codex', 'cursor', 'grok', 'kiro', 'agy',
     ]
     expect(AGENTS.flatMap((a) => (a.skills ? [a.skills.targetId] : [])).sort()).toEqual([...expected].sort())
   })

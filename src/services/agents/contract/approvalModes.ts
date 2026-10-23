@@ -22,4 +22,5 @@ export const AGENT_APPROVAL_DETECTION: Record<AgentId, AgentApprovalDetection> =
   opencode: { source: 'signal', mode: 'unknown', detail: 'Uses the CLI’s permission request and response events.' },
   cursor: { source: 'unavailable', mode: 'unknown', detail: 'This CLI does not report permission waits. Turns stay Running until completion.' },
   kiro: { source: 'unavailable', mode: 'unknown', detail: 'This CLI does not report permission waits. Turns stay Running until completion.' },
+  agy: { source: 'unavailable', mode: 'unknown', detail: 'Turns stay Running until completion.' },
 }

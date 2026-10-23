@@ -121,6 +121,15 @@ const FIXTURES: Record<AgentId, TitleFixture> = {
       )
     },
   },
+  agy: {
+    sessionId: '77777777-7777-4777-8777-777777777777',
+    prompt: (env) => ({ hook_event_name: 'turn-start', session_id: env.sessionId, cwd: env.cwd }),
+    writeTitle(env, title) {
+      const file = path.join(env.home, '.gemini', 'antigravity-cli', 'history.jsonl')
+      mkdirSync(path.dirname(file), { recursive: true })
+      writeFileSync(file, `${JSON.stringify({ conversationId: env.sessionId, display: title })}\n`, { flag: 'a' })
+    },
+  },
 }
 
 let tmp = ''

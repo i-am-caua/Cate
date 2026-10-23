@@ -38,6 +38,7 @@ function relocatedStore(agentId: AgentId, env: Record<string, string>): [string,
     // Kiro V3 keeps them under KIRO_HOME; earlier versions under HOME.
     case 'kiro': return ['.kiro/sessions', existsSync(path.join(env.KIRO_HOME, 'sessions')) ? path.join(env.KIRO_HOME, 'sessions') : path.join(env.HOME, '.kiro', 'sessions')]
     case 'opencode': return ['.local/share/opencode', path.join(env.XDG_DATA_HOME, 'opencode')]
+    case 'agy': return null
   }
 }
 
@@ -103,6 +104,7 @@ describe.skipIf(process.env.CATE_LIVE_AGENT_CLIS !== '1')('installed agent full 
           opencode: { name: 'write', arguments: { filePath: path.join(cwd, 'created.txt'), content: 'after\n' } },
           kiro: { name: 'fs_write', arguments: { path: path.join(cwd, 'created.txt'), text: 'after\n' } },
           cursor: { name: 'Write', arguments: { path: path.join(cwd, 'created.txt'), text: 'after\n' } },
+          agy: { name: 'write_file', arguments: { Path: path.join(cwd, 'created.txt'), Content: 'after\n' } },
         }[agentId]
         let recovering = false
         let followupAnswer: string | undefined
@@ -114,6 +116,7 @@ describe.skipIf(process.env.CATE_LIVE_AGENT_CLIS !== '1')('installed agent full 
           opencode: { name: 'bash', arguments: { command, description: 'Lifecycle fixture command' } },
           kiro: { name: 'execute_bash', arguments: { command } },
           cursor: { name: 'Shell', arguments: { command } },
+          agy: { name: 'run_command', arguments: { CommandLine: command } },
         }[agentId]
         const tool = scenario === 'edit' ? edit : shell
         const provider = await createHookMockProvider({ reply: (input, protocol) => {

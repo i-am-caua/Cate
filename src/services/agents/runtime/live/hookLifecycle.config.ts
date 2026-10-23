@@ -71,6 +71,11 @@ export const HOOK_LIFECYCLE_CASES: Record<AgentId, Record<string, string[]>> = {
     interrupt: [], // V3 has no native interrupt hook; Cate uses the PTY input.
     resume: ['SessionStart', 'UserPromptSubmit', 'Stop'],
   },
+  agy: {
+    edit: ['sessionStart', 'beforeSubmitPrompt', 'postToolUse', 'stop'],
+    interrupt: [],
+    resume: ['sessionStart', 'beforeSubmitPrompt', 'stop'],
+  },
 }
 
 export function selectHookLifecycleCases(agentId: AgentId, selection?: string): string[] {

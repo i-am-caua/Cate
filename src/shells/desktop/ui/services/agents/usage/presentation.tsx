@@ -12,6 +12,7 @@ export const AGENT_COLORS: Record<AgentId, string> = {
   opencode: '#5b9cf5',
   kiro: '#9046ff',
   cursor: 'var(--text-secondary)',
+  agy: '#1a73e8',
 }
 
 export const AGENT_ORDER = Object.keys(AGENT_COLORS) as AgentId[]

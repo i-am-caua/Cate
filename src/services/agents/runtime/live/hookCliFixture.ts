@@ -104,5 +104,7 @@ export async function configureHookCli(agentId: AgentId, directory: string, cwd:
         provider: { cate: { npm: '@ai-sdk/openai-compatible', name: 'Cate mock', options: { baseURL: `${mockUrl}/v1`, apiKey: 'cate-fake-key' }, models: { 'cate-mock': { name: 'Cate mock' } } } },
       }))
       return { args: ['--model', 'cate/cate-mock', '--prompt', initialPrompt] }
+    case 'agy':
+      return { args: [initialPrompt] }
   }
 }
