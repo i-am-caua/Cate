@@ -260,25 +260,28 @@ const http = require('http')
 const agentId = process.argv[2] || ''
 const HOOK_RUNNER_ENV = ${JSON.stringify(HOOK_RUNNER_ENV)}
 let data = ''
+function finish(output) {
+  if (agentId === 'agy') {
+    if (output) {
+      process.stdout.write(JSON.stringify({ injectSteps: [{ systemMessage: { systemMessage: output } }] }))
+    } else {
+      process.stdout.write('{}')
+    }
+  } else if (output) {
+    process.stdout.write(output)
+  }
+  process.exit(0)
+}
 process.stdin.setEncoding('utf8')
 process.stdin.on('data', (c) => { data += c })
 process.stdin.on('end', () => {
   const endpoint = process.env.${CATE_HOOK_ENDPOINT_ENV}
   const token = process.env.${CATE_HOOK_TOKEN_ENV}
-  if (!endpoint || !token || !agentId) process.exit(0)
-  // Cross-vendor guard (AgentHookSpec.hookRunnerEnv). A CLI may run OTHER
-  // vendors' hook files (grok runs .claude/settings.local.json), firing the
-  // wrapper we injected for them with its own payload. The runner's reserved
-  // var deterministically names who ran us: drop the post unless the
-  // wrapper's baked-in agent id agrees. The runner's own wrapper still
-  // reports the event, so nothing is lost.
+  if (!endpoint || !token || !agentId) finish()
   const ranBy = Object.keys(HOOK_RUNNER_ENV).find((id) => process.env[HOOK_RUNNER_ENV[id]]) || null
-  if (ranBy !== (HOOK_RUNNER_ENV[agentId] ? agentId : null)) process.exit(0)
+  if (ranBy !== (HOOK_RUNNER_ENV[agentId] ? agentId : null)) finish()
   let payload
   try { payload = JSON.parse(data) } catch { payload = { raw: data } }
-  // pid: the bridge's PARENT — the agent CLI (or its sh hook-command layer),
-  // never the bridge itself. The daemon walks the ancestry from here to find
-  // the agent process for liveness tracking.
   const body = JSON.stringify({ agentId, terminalId: process.env.${CATE_TERMINAL_ID_ENV} || null, pid: process.ppid, payload })
   const req = http.request(endpoint + '/hook', {
     method: 'POST',
@@ -288,14 +291,13 @@ process.stdin.on('end', () => {
     let output = ''
     res.setEncoding('utf8')
     res.on('data', (chunk) => { output += chunk })
-    res.on('end', () => { if (res.statusCode === 200 && output) process.stdout.write(output); process.exit(0) })
+    res.on('end', () => finish(res.statusCode === 200 && output ? output : ''))
   })
-  req.on('timeout', () => { req.destroy(); process.exit(0) })
-  req.on('error', () => process.exit(0))
+  req.on('timeout', () => { req.destroy(); finish() })
+  req.on('error', () => finish())
   req.end(body)
 })
-// Hard cap so a wedged pipe can never hold the CLI's hook slot open.
-setTimeout(() => process.exit(0), 10000)
+setTimeout(() => finish(), 10000)
 `
 
 export function createAgentHooks(deps: AgentHooksDeps): AgentHooks {

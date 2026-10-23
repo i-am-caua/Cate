@@ -13,6 +13,7 @@ describe('agentLaunchCommand', () => {
       { id: 'grok', command: { executable: 'grok', args: [prefixed] } },
       { id: 'opencode', command: { executable: 'opencode', args: ['--prompt', prefixed] } },
       { id: 'kiro', command: { executable: 'kiro-cli', args: ['chat', '--v3', prefixed] } },
+      { id: 'agy', command: { executable: 'agy', args: ['-i', prefixed] } },
     ])
   })
 
@@ -31,6 +32,7 @@ describe('agentLaunchCommand', () => {
       { id: 'grok', command: { executable: 'grok', args: [] } },
       { id: 'opencode', command: { executable: 'opencode', args: [] } },
       { id: 'kiro', command: { executable: 'kiro-cli', args: ['chat', '--v3'] } },
+      { id: 'agy', command: { executable: 'agy', args: [] } },
     ])
   })
 

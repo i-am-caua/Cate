@@ -784,6 +784,40 @@ async function promptContext() {
     return response.ok ? await response.text() : ""
   } catch { return "" }
 }
+async function dispatchEvent(event) {
+  if (!event) return
+  const props = event.properties ?? event.data ?? event
+  const type = event.type ?? props.type
+  if (!type || !TRACKED.has(type)) return
+  const sessionID = props.sessionID ?? props.part?.sessionID ?? props.info?.id ?? null
+  if (sessionID && type === "session.created" && props.info?.parentID) {
+    SUBAGENT_SESSIONS.add(sessionID)
+    PARENT_SESSIONS.set(sessionID, props.info.parentID)
+  }
+  // A tool call that ran. An errored part is also a refused one, so only
+  // completed parts count (a failing command still completes).
+  const toolDone = type === "message.part.updated" && props.part?.type === "tool" && props.part.state?.status === "completed"
+  if (type === "message.part.updated" && !toolDone) return
+  if (SUBAGENT_SESSIONS.has(sessionID) && !toolDone) return
+  fetch(ENDPOINT + "/hook", {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: "Bearer " + TOKEN },
+    body: JSON.stringify({
+      agentId: "opencode",
+      terminalId: process.env.${CATE_TERMINAL_ID_ENV} ?? null,
+      pid: process.pid, // in-process: this IS the agent, for presence tracking
+      payload: {
+        type,
+        sessionID,
+        status: props.status ?? null,
+        directory: props.info?.directory ?? null,
+        permission: props.permission ?? null,
+        metadata: props.metadata ?? null,
+        ...(toolDone ? { part: props.part, parentSessionId: PARENT_SESSIONS.get(sessionID) } : {}),
+      },
+    }),
+  }).catch(() => {})
+}
 export const CateHookBridge = async () => {
   if (!ENDPOINT || !TOKEN) return {}
   return {
@@ -791,39 +825,19 @@ export const CateHookBridge = async () => {
       const context = await promptContext()
       if (context) output.system.push(context)
     },
-    event: async ({ event }) => {
-      if (!event || !TRACKED.has(event.type)) return
-      const props = event.properties ?? {}
-      const sessionID = props.sessionID ?? props.part?.sessionID ?? props.info?.id ?? null
-      if (sessionID && event.type === "session.created" && props.info?.parentID) {
-        SUBAGENT_SESSIONS.add(sessionID)
-        PARENT_SESSIONS.set(sessionID, props.info.parentID)
-      }
-      // A tool call that ran. An errored part is also a refused one, so only
-      // completed parts count (a failing command still completes).
-      const toolDone = event.type === "message.part.updated" && props.part?.type === "tool" && props.part.state?.status === "completed"
-      if (event.type === "message.part.updated" && !toolDone) return
-      if (SUBAGENT_SESSIONS.has(sessionID) && !toolDone) return
-      fetch(ENDPOINT + "/hook", {
-        method: "POST",
-        headers: { "content-type": "application/json", authorization: "Bearer " + TOKEN },
-        body: JSON.stringify({
-          agentId: "opencode",
-          terminalId: process.env.${CATE_TERMINAL_ID_ENV} ?? null,
-          pid: process.pid, // in-process: this IS the agent, for presence tracking
-          payload: {
-            type: event.type,
-            sessionID,
-            status: props.status ?? null,
-            directory: props.info?.directory ?? null,
-            permission: props.permission ?? null,
-            metadata: props.metadata ?? null,
-            ...(toolDone ? { part: props.part, parentSessionId: PARENT_SESSIONS.get(sessionID) } : {}),
-          },
-        }),
-      }).catch(() => {})
-    },
+    event: async ({ event }) => dispatchEvent(event),
   }
+}
+export default {
+  id: "cate-hook",
+  setup: async (api) => {
+    if (!ENDPOINT || !TOKEN) return {}
+    if (api?.event?.subscribe) {
+      api.event.subscribe(async (event) => {
+        await dispatchEvent(event)
+      })
+    }
+  },
 }
 `
 

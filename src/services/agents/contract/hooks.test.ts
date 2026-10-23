@@ -590,6 +590,7 @@ describe('interrupt', () => {
       // Verified live: Ctrl-C returns to Kiro's prompt without a Stop hook or
       // transcript marker; the runtime recovers it from the Ctrl-C input edge.
       kiro: 'input',
+      agy: 'input',
     })
   })
 })

@@ -225,8 +225,12 @@ export const AGENT_DEFS: Record<AgentId, AgentDef> = {
     startArgs: [],
     interruptKeys: ['ctrl-c'],
     matchProcess: (n) => n === 'agy',
-    promptContextHook: null,
-    promptGuidance: null,
+    promptContextHook: 'plain-text',
+    promptGuidance: [
+      '<cate-execution-guidance agent="agy">',
+      'Use the Cate CLI to interact with other panels: `cate agent list`, `cate agent send --panel <panelId> "<prompt>"`, `cate terminal read`, `cate terminal type`.',
+      '</cate-execution-guidance>',
+    ].join('\n'),
     skills: folderSkills('agy', ['.agents', 'skills'], { nameMatchesDir: false }),
   },
 }

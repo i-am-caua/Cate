@@ -27,7 +27,7 @@ describe('agent registry coverage', () => {
       grok: null,
       kiro: 'plain-text',
       opencode: 'endpoint',
-      agy: null,
+      agy: 'plain-text',
     })
   })
 
