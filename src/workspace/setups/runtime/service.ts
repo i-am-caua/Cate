@@ -100,6 +100,7 @@ export function createSetupRuntime(deps: SetupRuntimeDeps) {
     }
     const entries = await Promise.all(names
       .filter((name) => name.endsWith('.json') && SAFE_ID.test(name.slice(0, -5)))
+      .sort((a, b) => a.localeCompare(b))
       .map((name) => {
         const id = name.slice(0, -5)
         return readEntry(scope, path.join(dirFor(scope), name), id)

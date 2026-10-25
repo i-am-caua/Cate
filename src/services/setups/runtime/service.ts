@@ -20,7 +20,6 @@ import {
   type CateSetup,
   type ListedSetup,
   type SetupEdge,
-  type SetupEdgeKind,
   type SetupScope,
   type SetupSource,
 } from '../contract/schema'
