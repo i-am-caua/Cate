@@ -20,5 +20,7 @@ export const cateApiSettings = defineSettings({
     cliEditorControlEnabled: setting(true),
     cliAgentReadEnabled: setting(true),
     cliAgentControlEnabled: setting(true),
+    cliSetupReadEnabled: setting(true),
+    cliSetupControlEnabled: setting(true),
   },
 })

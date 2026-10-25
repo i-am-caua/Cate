@@ -37,6 +37,8 @@ import { vcsCapability } from '@workspace/repository/contract'
 import { createRepositoryRuntime, vcsCapabilityImpl } from '@workspace/repository/runtime'
 import { skillsCapability, type SkillTarget } from '@workspace/skills/contract'
 import { createSkillsRuntime, skillsCapabilityImpl } from '@workspace/skills/runtime'
+import { setupCapability } from '@workspace/setups/contract'
+import { createSetupRuntime, setupCapabilityImpl } from '@workspace/setups/runtime'
 import {
   addPanelRelation,
   createConnectedEditors,
@@ -53,8 +55,10 @@ import {
 } from '@services/terminal/runtime'
 import { browserDataCapability } from '@services/browser/contract'
 import { browserDataCapabilityImpl, createBrowserDataRuntime } from '@services/browser/runtime'
-import { AGENTS, agentsCapability } from '@services/agents/contract'
+import { AGENTS, agentsCapability, type AgentId } from '@services/agents/contract'
 import { agentApi, relationApi } from '@services/agents/contract/api'
+import { setupApi as setupLibraryApi } from '@services/setups/contract'
+import { createSetupsRuntime } from '@services/setups/runtime'
 import { notificationsCapability } from '@workspace/notifications/contract'
 import { createNotifications, notificationsCapabilityImpl } from '@workspace/notifications/runtime'
 import { CATE_API } from '@panels/api'
@@ -80,6 +84,8 @@ import { onQuarantine, quarantinedFiles, type Quarantined } from '@kernel/state/
 export interface WorkspaceDeps {
   root: string
   runtimeId: string
+  /** The user's home; `~/.cate` (global setups) lives under it. */
+  home?: string
   paths: DataPaths
   /** The local socket: `CATE_SOCKET` for terminals. */
   endpoint: string
@@ -318,6 +324,36 @@ export function composeWorkspace(deps: WorkspaceDeps) {
   offs.push(router.registerService(agentApi, agentsRuntime.apiHandlers()))
   offs.push(router.registerService(relationApi, agentsRuntime.relationApiHandlers()))
 
+  // Setups start agents and draw their relations through the same ports the
+  // agents service uses, so they land on the requested canvas.
+  const setups = createSetupRuntime({
+    root,
+    ...(deps.home ? { home: deps.home } : {}),
+    trust,
+    prepareCateDir,
+    log: log.child('setups'),
+    startAgent: (args) => agentsRuntime.start(undefined, {
+      ...(args.agentId ? { agentId: args.agentId as AgentId } : {}),
+      title: args.title,
+      ...(args.prompt ? { prompt: args.prompt } : {}),
+      placement: { at: args.at },
+      ...(args.orchestrator ? { orchestrator: true } : {}),
+    }),
+    addRelation: (fromPanelId, toPanelId, kind, label) =>
+      addPanelRelation(document, (type) => relationRole(type), fromPanelId, toPanelId, kind, label),
+    canvasForPanel: (canvasPanelId) => document.get().panels[canvasPanelId]?.canvasId ?? null,
+    defaultCanvasPanel: () => Object.values(document.get().panels)
+      .find((panel) => panel.type === 'canvas' && panel.canvasId)?.id ?? null,
+  })
+  const setupLibrary = createSetupsRuntime({
+    root,
+    ...(deps.home ? { homeDir: deps.home } : {}),
+    agents: agentsRuntime,
+    document,
+    relationRole: (type) => relationRole(type),
+  })
+  offs.push(router.registerService(setupLibraryApi, setupLibrary.apiHandlers()))
+
   // ---- Panels -----------------------------------------------------------------
 
   const services: PanelServices = {
@@ -368,6 +404,7 @@ export function composeWorkspace(deps: WorkspaceDeps) {
   rpc.register(searchCapability, searchCapabilityImpl(files))
   rpc.register(vcsCapability, vcsCapabilityImpl(repository))
   rpc.register(skillsCapability, skillsCapabilityImpl(skills))
+  rpc.register(setupCapability, setupCapabilityImpl(setups))
   rpc.register(processCapability, processCapabilityImpl(terminal))
   rpc.register(browserDataCapability, browserDataCapabilityImpl(browserData))
   rpc.register(agentsCapability, agentsRuntime.capability())

@@ -12,6 +12,7 @@ import {
   type CliDeps,
 } from './engine'
 import { CATE_API } from '@panels/api'
+import { formatOutput } from './format'
 
 const commands = buildCommands(CATE_API)
 const parse = (argv: string[]) => parseCommandLine(argv, commands, '/work/repo')
@@ -29,6 +30,7 @@ describe('commands from specs', () => {
       'terminal read', 'terminal type', 'terminal press',
       'review note add', 'review note resolve', 'agent wait', 'agent start',
       'relation list', 'relation add', 'relation remove', 'relation set', 'relation context', 'relation orchestrator',
+      'setup list', 'setup show', 'setup apply', 'setup save', 'setup import', 'setup delete',
     ]))
     // Every browser method is a command.
     expect(words).toEqual(expect.arrayContaining([
@@ -40,7 +42,32 @@ describe('commands from specs', () => {
   })
 })
 
+describe('setup list formatting', () => {
+  it('prints id, name, scope, node and edge counts in a table', () => {
+    const output = formatOutput('setupList', [{
+      id: 'team-flow', name: 'Team Flow', scope: 'workspace',
+      nodes: [{}, {}], edges: [{}],
+    }])
+    expect(output.split('\n')[0]).toMatch(/ID\s+NAME\s+SCOPE\s+NODES\s+EDGES/)
+    expect(output).toContain('team-flow  Team Flow  workspace  2      1')
+  })
+})
+
 describe('parseCommandLine', () => {
+  it('parses setup ids, canvas placement and save options', () => {
+    expect(call(['setup', 'apply', 'team-flow', '--canvas', 'cv12'])).toEqual({
+      method: 'cate.setup.apply',
+      args: { setupId: 'team-flow', canvasPanelId: 'cv12' },
+      json: false,
+    })
+    expect(call(['setup', 'save', 'configs/team.json', '--global', '--id', 'team-flow', '--name', 'Team Flow']).args).toEqual({
+      file: path.resolve('/work/repo/configs/team.json'),
+      global: true,
+      setupId: 'team-flow',
+      name: 'Team Flow',
+    })
+  })
+
   it('parses positionals, rest words and the session --panel target', () => {
     expect(call(['panel', 'list'])).toEqual({ method: 'cate.panel.list', args: {}, json: false })
     expect(call(['terminal', 'type', 'npm', 'test', '--panel', 'ab12'])).toMatchObject({

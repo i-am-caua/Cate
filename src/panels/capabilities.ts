@@ -16,6 +16,7 @@ import { workspaceCapability } from '@workspace/lifecycle/contract/capability'
 import { fileCapability, searchCapability } from '@workspace/files/contract/capability'
 import { vcsCapability } from '@workspace/repository/contract/capability'
 import { skillsCapability } from '@workspace/skills/contract/capability'
+import { setupCapability } from '@workspace/setups/contract/capability'
 import { notificationsCapability } from '@workspace/notifications/contract/capability'
 import { agentsCapability } from '@services/agents/contract/capability'
 import { browserDataCapability } from '@services/browser/contract/capability'
@@ -37,6 +38,7 @@ export const RUNTIME_CAPABILITIES = [
   searchCapability,
   vcsCapability,
   skillsCapability,
+  setupCapability,
   notificationsCapability,
   agentsCapability,
   browserDataCapability,

@@ -85,6 +85,17 @@ function relationList(value: unknown): string {
   }))
 }
 
+function setupList(value: unknown): string {
+  if (!Array.isArray(value)) return generic(value)
+  if (value.length === 0) return '(no setups)'
+  return table(['ID', 'NAME', 'SCOPE', 'NODES', 'EDGES'], value.map((item) => {
+    const setup = asObject(item) ?? {}
+    const nodes = Array.isArray(setup.nodes) ? setup.nodes.length : 0
+    const edges = Array.isArray(setup.edges) ? setup.edges.length : 0
+    return [text(setup.id), text(setup.name), text(setup.scope), String(nodes), String(edges)]
+  }))
+}
+
 function conversation(value: unknown): string {
   const object = asObject(value)
   if (!object || !Array.isArray(object.messages)) return generic(value)
@@ -154,6 +165,7 @@ const FORMATTERS: Record<string, (value: unknown) => string> = {
   panelList,
   agentRuns,
   relationList,
+  setupList,
   relationAdded: (value) => {
     const relationId = asObject(value)?.relationId
     return typeof relationId === 'string' ? `relation  ${shortId(relationId)}` : generic(value)

@@ -24,6 +24,7 @@ import {
 } from '../../client/layout/canvas'
 import { AgentChangesOverlay, AgentHooksOffOverlay, AgentSpawnFlyout, UsageOverview, agentContextPreview, useAgentContextTransport, useAgentTabDecorations } from '../../services/agents'
 import { SkillsDialog } from '../../workspace/skills'
+import { SetupsToolbarItem } from '../../workspace/setups'
 import { useWorkspaceList } from '../../client/workspaces'
 import { clientApp } from '../app'
 import {
@@ -182,6 +183,7 @@ export function registerWorkspaceViews(): () => void {
     registerPanelChromeOverlay(AgentChangesOverlay),
     registerPanelChromeOverlay(AgentHooksOffOverlay),
     registerCanvasToolbarItem({ id: 'worktrees', group: 'tools', order: 10, Component: WorktreeToolbarItem }),
+    registerCanvasToolbarItem({ id: 'setups', group: 'tools', order: 20, Component: SetupsToolbarItem }),
     registerSpawnFlyout({ panelType: 'terminal', Component: AgentTerminalFlyout }),
   ]
   return () => {

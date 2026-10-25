@@ -209,6 +209,7 @@ export async function serveWorkspace(options: ServeOptions): Promise<ServeResult
   const ws = composeWorkspace({
     root,
     runtimeId,
+    home,
     paths,
     endpoint,
     installDir,
