@@ -3,6 +3,7 @@ export {
   moveRelation,
   relationTargets,
   removeRelation,
+  setOrchestratorPanel,
   setRelationContextMode,
   updateRelationMeaning,
   type RelationDocument,

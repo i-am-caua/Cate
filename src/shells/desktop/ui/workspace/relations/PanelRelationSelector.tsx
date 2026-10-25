@@ -3,7 +3,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Point } from '@workspace/canvas/contract'
 import type { PanelRecord, PanelRelation, RelationKind } from '@workspace/document/contract'
-import { RELATION_LABEL_MAX, panelRelationLabel, panelRelationOptions, relationPanelOf } from '@workspace/relations/contract'
+import { RELATION_LABEL_MAX, isExecutionSurface, isOrchestratorPanel, panelRelationLabel, panelRelationOptions, relationPanelOf } from '@workspace/relations/contract'
 import {
   forgetRelationLabel,
   labelRelation,
@@ -11,6 +11,7 @@ import {
   rememberRelationLabel,
   removeRelation,
   renameRelationLabel,
+  setOrchestratorPanel,
   updateRelationMeaning,
 } from './actions'
 import { relationRoleOf, useRelationCanvas, useSavedRelationLabels } from './host'
@@ -392,6 +393,32 @@ export function PanelRelationSelector({
           <PencilSimple size={11} className="mr-1.5 shrink-0 text-secondary" />
           Add custom relationship
         </button>
+        {isExecutionSurface(source) && isExecutionSurface(target) ? (
+          <>
+            <div className="my-1 h-px bg-surface-border" />
+            <button
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={isOrchestratorPanel(sourcePanel.fields)}
+              tabIndex={open ? 0 : -1}
+              className="flex w-full items-start gap-1.5 rounded-md px-2 py-1.5 text-left text-primary outline-none transition-colors duration-100 hover:bg-hover focus-visible:bg-hover motion-reduce:transition-none"
+              onClick={() => {
+                setOrchestratorPanel(workspaceId, sourcePanel.id, !isOrchestratorPanel(sourcePanel.fields))
+                setOpen(false)
+              }}
+            >
+              <span className="mt-px grid h-3.5 w-3.5 shrink-0 place-items-center text-focus-blue">
+                {isOrchestratorPanel(sourcePanel.fields) ? <Check size={11} weight="bold" /> : null}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block">Orchestrator (Maestro)</span>
+                <span className="block truncate text-[9px] leading-3 text-muted">
+                  Bidirectional — worker reports back when done
+                </span>
+              </span>
+            </button>
+          </>
+        ) : null}
       </div>
       </RelationMenuPortal>
     </div>

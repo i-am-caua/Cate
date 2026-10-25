@@ -2,6 +2,7 @@
 // agents service uses for prompt context (architecture 9.7). Pure.
 
 import type { DocChange, JsonObject, PanelRecord, PanelRelation, RelationKind, WorkspaceDocument } from '@workspace/document/contract'
+import { isOrchestratorPanel } from './contextMode'
 
 export type PanelRelationKind = RelationKind
 
@@ -313,10 +314,43 @@ export function relatedPanelIds(steps: readonly RelationStep[]): string[] {
   return [...new Set(steps.map((step) => step.target.id))]
 }
 
+/** An upstream execution surface that connects to an execution surface. */
+export interface IncomingRelationStep {
+  relation: PanelRelation
+  source: RelationPanel
+  orchestrator: boolean
+}
+
+/** Upstream execution surfaces reaching `targetPanelId` directly, or from an
+ *  orchestrator panel through an intermediate resource panel. */
+export function incomingExecutionSteps(
+  targetPanelId: string,
+  panels: Record<string, RelationPanel>,
+  relations: readonly PanelRelation[],
+): IncomingRelationStep[] {
+  const target = panels[targetPanelId]
+  if (!target || !isExecutionSurface(target)) return []
+  const incoming: IncomingRelationStep[] = []
+  const seenSources = new Set<string>()
+  for (const candidate of Object.values(panels)) {
+    if (candidate.id === targetPanelId || !isExecutionSurface(candidate)) continue
+    const orchestrator = isOrchestratorPanel(candidate.fields)
+    const reach = relationReach(candidate.id, panels, relations) ?? []
+    for (const step of reach) {
+      if (step.target.id !== targetPanelId) continue
+      if (!step.fromSource && !orchestrator) continue
+      if (seenSources.has(candidate.id)) break
+      seenSources.add(candidate.id)
+      incoming.push({ relation: step.relation, source: candidate, orchestrator })
+      break
+    }
+  }
+  return incoming
+}
+
 /** Compile the reachable flow up to the next execution surfaces, regardless
- * of the relation kind used to reach them. Sends are transport operations;
- * each destination receives its own downstream segment through the same
- * submit-time context hook as a user-entered prompt. */
+ * of the relation kind used to reach them, plus bidirectional return routing
+ * back to upstream orchestrators / execution panels. */
 export function compileRelationContext(
   sourcePanelId: string,
   panels: Record<string, RelationPanel>,
@@ -324,6 +358,8 @@ export function compileRelationContext(
 ): PanelRelationContext | null {
   const steps = relationReach(sourcePanelId, panels, relations)
   if (!steps) return null
+  const source = panels[sourcePanelId]
+  const orchestrator = source ? isOrchestratorPanel(source.fields) : false
 
   const instructions: string[] = []
   const targetExecutionPanelIds: string[] = []
@@ -346,14 +382,35 @@ export function compileRelationContext(
     instructions.push(resourceInstruction(relation.kind, target, relation.label, viaSource ? undefined : actor))
   }
 
+  const incomingPanelIds: string[] = []
+  for (const incoming of incomingExecutionSteps(sourcePanelId, panels, relations)) {
+    // In a non-orchestrator multi-hop agent cascade (A -> B -> C), B forwards
+    // to C; when A is an orchestrator or B has no downstream agent target, B
+    // reports back to A.
+    if (!incoming.orchestrator && targetExecutionPanelIds.length > 0) continue
+    if (!incomingPanelIds.includes(incoming.source.id)) incomingPanelIds.push(incoming.source.id)
+    const roleLabel = incoming.orchestrator ? 'Orchestrator' : 'Upstream agent'
+    instructions.push(
+      `${roleLabel} ${panelRef(incoming.source)}${customIntent(incoming.relation.label)} `
+      + 'When you finish your task, report your findings and results back by running '
+      + `cate agent send --panel ${shortPanelId(incoming.source.id)} "<concise summary and results>".`,
+    )
+  }
+
   if (instructions.length === 0) return null
+  const allRelatedIds = [...new Set([...relatedPanelIds(steps), ...incomingPanelIds])]
   return {
     targetExecutionPanelIds,
-    relatedPanelIds: relatedPanelIds(steps),
+    relatedPanelIds: allRelatedIds,
     text: [
       '<cate-connected-panels>',
-      'Routing context:',
+      orchestrator ? 'Routing context (Orchestrator):' : 'Routing context:',
       ...instructions.map((instruction, index) => `${index + 1}. ${instruction}`),
+      ...(orchestrator && targetExecutionPanelIds.length > 0 && source
+        ? [
+            `Orchestrator workflow: After dispatching tasks with cate agent send, stop and end your turn to wait for replies. Do not poll with sleep or terminal read — connected agents are instructed to report back via cate agent send --panel ${shortPanelId(source.id)} "<result>" when finished.`,
+          ]
+        : []),
       '</cate-connected-panels>',
     ].join('\n'),
   }

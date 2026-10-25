@@ -4,6 +4,7 @@
 import type { Point } from '@workspace/canvas/contract'
 import type { DocBatch, DocChange, PanelRecord, RelationKind, RelationSide, WorkspaceDocument } from '@workspace/document/contract'
 import {
+  ORCHESTRATOR_PANEL_FIELD,
   RELATION_CONTEXT_MODE_FIELD,
   newRelationProblem,
   type RelationContextMode,
@@ -62,6 +63,18 @@ export function removeRelation(store: RelationDocument, relationId: string): boo
 
 export function setRelationContextMode(store: RelationDocument, panelId: string, mode: RelationContextMode): boolean {
   return store.propose({ kind: 'updatePanel', id: panelId, patch: { fields: { [RELATION_CONTEXT_MODE_FIELD]: mode } } }).ok
+}
+
+export function setOrchestratorPanel(store: RelationDocument, panelId: string, enabled: boolean): boolean {
+  return store.propose({
+    kind: 'updatePanel',
+    id: panelId,
+    patch: {
+      fields: enabled
+        ? { [ORCHESTRATOR_PANEL_FIELD]: true, [RELATION_CONTEXT_MODE_FIELD]: 'always' }
+        : { [ORCHESTRATOR_PANEL_FIELD]: null },
+    },
+  }).ok
 }
 
 /** The panels `sourcePanelId` can connect to: every other panel a relation

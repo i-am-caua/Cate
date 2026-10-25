@@ -311,6 +311,10 @@ export function createAgentHooks(deps: AgentHooksDeps): AgentHooks {
   /** Terminals with a hook-proven turn in flight (and its id, when known). */
   const activeTurns = new Map<string, string | undefined>()
   const promptContexts = new Map<string, string>()
+  /** Context captured at turn-start for `endpoint` agents (OpenCode) whose
+   *  in-process plugin fetches `/prompt-context` after `session.status: busy`
+   *  has already disarmed a one-shot context. */
+  const endpointTurnContexts = new Map<string, string>()
   /** The env each PTY's CLI resolves its config with (approval inspection). */
   const approvalEnvs = new Map<string, NodeJS.ProcessEnv>()
   const approvalCache = new Map<string, { time: number; value: Promise<AgentApprovalDetection> }>()
@@ -526,7 +530,8 @@ export function createAgentHooks(deps: AgentHooksDeps): AgentHooks {
               || !tokenMatches(req.headers.authorization, secret, body.terminalId)) {
               res.statusCode = 401; res.end(); return
             }
-            const context = promptContexts.get(body.terminalId) ?? ''
+            const context = promptContexts.get(body.terminalId) ?? endpointTurnContexts.get(body.terminalId) ?? ''
+            endpointTurnContexts.delete(body.terminalId)
             res.statusCode = 200
             res.setHeader('content-type', 'text/plain; charset=utf-8')
             res.end(context)
@@ -586,7 +591,15 @@ export function createAgentHooks(deps: AgentHooksDeps): AgentHooks {
               }
               // Read the context the submit hook answers with before subscribers
               // see the turn-start: a one-shot context is disarmed by it.
-              if (event?.kind === 'turn-start') output = encodedPromptContext(agentId as AgentId, terminalId)
+              if (event?.kind === 'turn-start') {
+                output = encodedPromptContext(agentId as AgentId, terminalId)
+                if (AGENT_DEFS[agentId as AgentId]?.promptContextHook === 'endpoint') {
+                  const current = promptContexts.get(terminalId)
+                  if (current) endpointTurnContexts.set(terminalId, current)
+                }
+              } else if (event?.kind === 'turn-end' || event?.kind === 'session-end') {
+                endpointTurnContexts.delete(terminalId)
+              }
               if (event) {
                 emit(event)
                 // Awaited (a cheap local stat) so the watch is armed by the time
@@ -717,10 +730,12 @@ export function createAgentHooks(deps: AgentHooksDeps): AgentHooks {
       inputSessions.delete(terminalId)
       activeTurns.delete(terminalId)
       promptContexts.delete(terminalId)
+      endpointTurnContexts.delete(terminalId)
       approvalEnvs.delete(terminalId)
     },
     noteAgentExited(terminalId) {
       activeTurns.delete(terminalId)
+      endpointTurnContexts.delete(terminalId)
     },
     setPromptContext(terminalId, context) {
       if (context) promptContexts.set(terminalId, context)

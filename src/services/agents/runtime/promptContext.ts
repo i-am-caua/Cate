@@ -2,7 +2,15 @@
 // connected to it, compiled at the last moment so relation edits made right
 // before a submit are honored.
 
-import { compileRelationContext, relationContextMode, relationPanels, type RelationContextMode, type RelationRoleOf } from '@workspace/relations/contract'
+import {
+  RELATION_CONTEXT_MODE_FIELD,
+  compileRelationContext,
+  incomingExecutionSteps,
+  relationContextMode,
+  relationPanels,
+  type RelationContextMode,
+  type RelationRoleOf,
+} from '@workspace/relations/contract'
 import type { PanelRecord, PanelRelation } from '@workspace/document/contract'
 import { AGENT_DEFS, type AgentId } from '../contract'
 
@@ -66,7 +74,12 @@ export function createPromptContext(deps: PromptContextDeps): PromptContext {
     if (!context) return null
     const record = deps.document.panel(panelId)
     if (record && relationContextMode(record.fields) === 'once') {
-      deps.document.setRelationContextMode(panelId, 'off')
+      const explicitOnce = record.fields[RELATION_CONTEXT_MODE_FIELD] === 'once'
+      const panels = relationPanels(deps.document.panels(), deps.relationRole)
+      const hasUpstreamAgent = incomingExecutionSteps(panelId, panels, [...deps.document.relations()]).length > 0
+      if (explicitOnce || !hasUpstreamAgent) {
+        deps.document.setRelationContextMode(panelId, 'off')
+      }
     }
     sent.set(panelId, Date.now())
     for (const listener of [...sentListeners]) listener(panelId)

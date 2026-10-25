@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { PanelRelation, PanelType } from '@workspace/document/contract'
+import type { JsonObject, PanelRelation, PanelType } from '@workspace/document/contract'
 import { panelDefinition } from '@panels/definitions'
 import {
   compileRelationContext,
@@ -13,7 +13,7 @@ import {
 } from './graph'
 
 // The real panel types' relation roles.
-const panel = (id: string, type: string, title = id, fields: Record<string, string> = {}): RelationPanel =>
+const panel = (id: string, type: string, title = id, fields: JsonObject = {}): RelationPanel =>
   relationPanelOf({ id, type: type as PanelType, title, fields }, (t) => panelDefinition(t)?.relation)
 
 describe('panel relation prompt context', () => {
@@ -186,5 +186,37 @@ describe('panel relation prompt context', () => {
 
     expect(context.text).toContain('Send relevant context by running cate agent send --panel terminal')
     expect(context.text).not.toContain('terminal When ready')
+  })
+
+  it('compiles bidirectional routing for an orchestrator and its connected worker terminals', () => {
+    const panels = {
+      '11111111-maestro': panel('11111111-maestro', 'terminal', 'Maestro', { orchestrator: true }),
+      '22222222-coder': panel('22222222-coder', 'terminal', 'Coder'),
+      '33333333-qa': panel('33333333-qa', 'terminal', 'QA'),
+      '44444444-browser': panel('44444444-browser', 'browser', 'Preview'),
+    }
+    const relations: PanelRelation[] = [
+      { id: 'r1', fromPanelId: '11111111-maestro', toPanelId: '22222222-coder', kind: 'trigger' },
+      { id: 'r2', fromPanelId: '11111111-maestro', toPanelId: '33333333-qa', kind: 'verify' },
+      { id: 'r3', fromPanelId: '33333333-qa', toPanelId: '44444444-browser', kind: 'use' },
+    ]
+
+    const maestroCtx = compileRelationContext('11111111-maestro', panels, relations)!
+    expect(maestroCtx.text).toContain('Routing context (Orchestrator):')
+    expect(maestroCtx.text).toContain('cate agent send --panel 22222222')
+    expect(maestroCtx.text).toContain('cate agent send --panel 33333333')
+    expect(maestroCtx.text).toContain('Orchestrator workflow: After dispatching tasks with cate agent send, stop and end your turn to wait for replies.')
+    expect(maestroCtx.text).toContain('cate agent send --panel 11111111')
+
+    const coderCtx = compileRelationContext('22222222-coder', panels, relations)!
+    expect(coderCtx.relatedPanelIds).toEqual(['11111111-maestro'])
+    expect(coderCtx.text).toContain('Orchestrator Maestro 11111111')
+    expect(coderCtx.text).toContain('cate agent send --panel 11111111 "<concise summary and results>"')
+
+    const qaCtx = compileRelationContext('33333333-qa', panels, relations)!
+    expect(qaCtx.relatedPanelIds).toEqual(['44444444-browser', '11111111-maestro'])
+    expect(qaCtx.text).toContain('Preview 44444444')
+    expect(qaCtx.text).toContain('Orchestrator Maestro 11111111')
+    expect(qaCtx.text).toContain('cate agent send --panel 11111111 "<concise summary and results>"')
   })
 })

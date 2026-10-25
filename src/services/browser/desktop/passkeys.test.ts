@@ -30,6 +30,19 @@ beforeEach(() => {
 })
 afterEach(() => vi.unstubAllGlobals())
 
+it('registers the availability handler when disabled without loading the addon', () => {
+  mocks.on.mockClear()
+  mocks.available.mockClear()
+  registerBrowserPasskeys({ enabled: false, isRegistered: mocks.registered })
+
+  const handler = mocks.on.mock.calls.find(([name]) => name === 'cate-passkeys-available')![1]
+  const event: { returnValue?: boolean } = {}
+  handler(event)
+
+  expect(event.returnValue).toBe(false)
+  expect(mocks.available).not.toHaveBeenCalled()
+})
+
 it('derives origin from the calling frame and validates RP before native dispatch', async () => {
   await invoke()
   expect(JSON.parse(mocks.request.mock.calls[0][0])).toMatchObject({ origin: 'https://example.com', options: { rpId: 'example.com' } })

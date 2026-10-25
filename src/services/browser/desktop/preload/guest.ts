@@ -6,7 +6,7 @@
 import { contextBridge, ipcRenderer, webFrame } from 'electron'
 import { installPasskeyPageBridge } from './passkeyPageBridge'
 
-if (process.isMainFrame && ipcRenderer.sendSync('cate-passkeys-available')) {
+if (process.isMainFrame && ipcRenderer.sendSync('cate-passkeys-available') === true) {
   contextBridge.exposeInMainWorld('__catePasskeys', {
     request: (input: unknown) => ipcRenderer.invoke('cate-passkeys-request', input),
     cancel: (id: string) => ipcRenderer.send('cate-passkeys-cancel', id),

@@ -6,10 +6,10 @@
 // take context (no prompt context hook).
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, Waypoints } from 'lucide-react'
+import { AlertTriangle, Crown, Waypoints } from 'lucide-react'
 import type { PanelRecord } from '@workspace/document/contract'
-import { isExecutionSurface, relatedPanelIds, relationContextMode, relationPanelOf, relationPanels, relationReach } from '@workspace/relations/contract'
-import { setRelationContextMode } from './actions'
+import { compileRelationContext, isExecutionSurface, isOrchestratorPanel, relationContextMode, relationPanelOf, relationPanels } from '@workspace/relations/contract'
+import { setOrchestratorPanel, setRelationContextMode } from './actions'
 import { relationRoleOf, useRelationMap, useRelationPanels, useRelationsEnabled } from './host'
 import { relationUiPort } from './port'
 
@@ -26,20 +26,21 @@ export function PanelRelationContextToggle({ panel, workspaceId }: {
   // A host may keep a stale record prop while the panel stays mounted.
   const currentPanel = records[panel.id] ?? panel
   const transport = relationUiPort().useContextTransport(workspaceId, currentPanel)
-  // How many panels go with a prompt; what is sent is the runtime's own
-  // preview (`agents.previewContext`), never compiled here.
+  // How many panels go with a prompt (outgoing and upstream orchestrator/agent
+  // return channels); what is sent is the runtime's own preview (`agents.previewContext`).
   const count = useMemo(() => {
-    const steps = relationReach(panel.id, relationPanels(Object.values(records), relationRoleOf), Object.values(relationMap))
-    return steps ? relatedPanelIds(steps).length : 0
+    const compiled = compileRelationContext(panel.id, relationPanels(Object.values(records), relationRoleOf), Object.values(relationMap))
+    return compiled ? compiled.relatedPanelIds.length : 0
   }, [panel.id, records, relationMap])
+  const orchestrator = isOrchestratorPanel(currentPanel.fields)
   const mode = relationContextMode(currentPanel.fields)
   const enabled = mode !== 'off'
   const justSent = useJustSent(transport?.sentAt)
   const blocked = transport?.blocked
-  const expanded = hovered || keyboardFocused || menuOpen || enabled || justSent || !!blocked
+  const expanded = hovered || keyboardFocused || menuOpen || enabled || orchestrator || justSent || !!blocked
 
   const openMenu = async () => {
-    if (menuOpen || count === 0) return
+    if (menuOpen || (count === 0 && !orchestrator)) return
     setMenuOpen(true)
     try {
       const choice = await relationUiPort().showMenu([
@@ -48,13 +49,17 @@ export function PanelRelationContextToggle({ panel, workspaceId }: {
           : []),
         { label: `${count} connected panel${count === 1 ? '' : 's'} attached`, enabled: false },
         { type: 'separator' },
+        { id: 'orchestrator', label: `${orchestrator ? '✓ ' : ''}Orchestrator (Maestro)` },
+        { type: 'separator' },
         { id: 'once', label: `${mode === 'once' ? '✓ ' : ''}Next message` },
         { id: 'always', label: `${mode === 'always' ? '✓ ' : ''}Every message` },
         { id: 'off', label: `${mode === 'off' ? '✓ ' : ''}Off` },
         { type: 'separator' },
         { id: 'preview', label: 'Preview sent context…' },
       ])
-      if (choice === 'once' || choice === 'always' || choice === 'off') {
+      if (choice === 'orchestrator') {
+        setOrchestratorPanel(workspaceId, panel.id, !orchestrator)
+      } else if (choice === 'once' || choice === 'always' || choice === 'off') {
         setRelationContextMode(workspaceId, panel.id, choice)
       } else if (choice === 'preview') {
         // What the runtime would send, guidance included.
@@ -66,7 +71,7 @@ export function PanelRelationContextToggle({ panel, workspaceId }: {
     }
   }
 
-  if (!panelRelationsEnabled || count === 0 || !transport || !isExecutionSurface(relationPanelOf(currentPanel, relationRoleOf))) return null
+  if (!panelRelationsEnabled || (count === 0 && !orchestrator) || !transport || !isExecutionSurface(relationPanelOf(currentPanel, relationRoleOf))) return null
 
   return (
     <button
@@ -74,8 +79,8 @@ export function PanelRelationContextToggle({ panel, workspaceId }: {
       aria-pressed={enabled}
       aria-haspopup="menu"
       aria-expanded={menuOpen}
-      aria-label={`${count} connected panels, ${blocked ? `not sent: ${blocked.label}` : mode === 'once' ? 'next message' : mode === 'always' ? 'every message' : 'off'}`}
-      title={blocked?.reason ?? 'Choose when connected panels are included'}
+      aria-label={`${orchestrator ? 'Orchestrator, ' : ''}${count} connected panels, ${blocked ? `not sent: ${blocked.label}` : mode === 'once' ? 'next message' : mode === 'always' ? 'every message' : 'off'}`}
+      title={blocked?.reason ?? (orchestrator ? 'Orchestrator (Maestro) — click to configure connected panels' : 'Choose when connected panels are included')}
       className={`inline-flex h-[20px] min-w-0 items-center rounded-full border transition-[border-color,background-color,color,filter] ${blocked
         ? 'border-transparent bg-warning text-black/85 hover:brightness-110'
         : enabled
@@ -96,7 +101,7 @@ export function PanelRelationContextToggle({ panel, workspaceId }: {
         void openMenu()
       }}
     >
-      {blocked ? <AlertTriangle size={11} className="shrink-0" /> : <Waypoints size={11} className="shrink-0" />}
+      {blocked ? <AlertTriangle size={11} className="shrink-0" /> : orchestrator ? <Crown size={11} className="shrink-0" /> : <Waypoints size={11} className="shrink-0" />}
       <span
         className="overflow-hidden whitespace-nowrap text-[10px]"
         style={{
@@ -105,7 +110,11 @@ export function PanelRelationContextToggle({ panel, workspaceId }: {
           transition: 'max-width 150ms ease, opacity 150ms ease',
         }}
       >
-        {justSent ? 'Context sent · ' : ''}{count} panel{count === 1 ? '' : 's'}{justSent ? '' : ` · ${blocked ? blocked.label : mode === 'once' ? 'Next' : mode === 'always' ? 'Always' : 'Off'}`}
+        {orchestrator
+          ? count === 0
+            ? 'Orchestrator'
+            : `${justSent ? 'Context sent · ' : 'Orchestrator · '}${count} panel${count === 1 ? '' : 's'}${justSent ? '' : ` · ${blocked ? blocked.label : mode === 'once' ? 'Next' : mode === 'always' ? 'Always' : 'Off'}`}`
+          : `${justSent ? 'Context sent · ' : ''}${count} panel${count === 1 ? '' : 's'}${justSent ? '' : ` · ${blocked ? blocked.label : mode === 'once' ? 'Next' : mode === 'always' ? 'Always' : 'Off'}`}`}
       </span>
     </button>
   )

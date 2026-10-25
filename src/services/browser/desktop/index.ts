@@ -46,8 +46,9 @@ export function createBrowserDesktop(options: BrowserDesktopOptions): BrowserDes
     notify: (host: WebContents, event) => host.send(BROWSER_PAGE_CHANNELS.downloads, event),
   })
   const unregister = registerBrowserIpc({ drivers, downloads, dialogs, tempDir: options.tempDir })
-  const passkeysAvailable = options.passkeys
-    ? registerBrowserPasskeys({ isRegistered: (id) => drivers.isRegistered(id) }).available
-    : false
+  const passkeysAvailable = registerBrowserPasskeys({
+    enabled: options.passkeys,
+    isRegistered: (id) => drivers.isRegistered(id),
+  }).available
   return { drivers, downloads, passkeysAvailable, dispose: unregister }
 }

@@ -9,7 +9,7 @@ import { tryRuntimeFor } from '@kernel/rpc/client'
 import { clientUi, errorMessage } from '@kernel/interaction'
 import { revealPanel } from '@client/host'
 import type { AgentId } from '@services/agents/contract'
-import { registerPanelChromeOverlay, registerTabDecorations } from '../../client/layout/dock'
+import { registerPanelChromeOverlay, registerTabDecorations, registerTabMenuItems } from '../../client/layout/dock'
 import {
   CanvasToolbarButton,
   canvasViewFor,
@@ -34,7 +34,8 @@ import {
   type RepositoryTab,
 } from '../../workspace/repository'
 import { openPullRequest, pullRequestNotOpenMessage } from '@workspace/repository/client'
-import { PanelRelationContextToggle, installRelationUiPort } from '../../workspace/relations'
+import { PanelRelationContextToggle, installRelationUiPort, relationRoleOf, setOrchestratorPanel } from '../../workspace/relations'
+import { isOrchestratorPanel } from '@workspace/relations/contract'
 import type { PanelRecord } from '@workspace/document/contract'
 import { OverlayHeader } from '../chrome/chrome'
 import { registerOverlay, type OverlayViewProps } from '../overlays'
@@ -164,6 +165,18 @@ export function registerWorkspaceViews(): () => void {
     registerOverlay('pullRequests', RepositoryOverlay),
     registerOverlay('usage', UsageOverlay),
     registerTabDecorations(useAgentTabDecorations),
+    registerTabMenuItems({
+      items: ({ record }) => {
+        if (!relationRoleOf(record.type)?.execution) return []
+        const active = isOrchestratorPanel(record.fields)
+        return [{ id: 'toggle-orchestrator', label: active ? '✓ Orchestrator (Maestro)' : 'Set as Orchestrator (Maestro)' }]
+      },
+      run: (id, { workspaceId, record }) => {
+        if (id !== 'toggle-orchestrator') return false
+        setOrchestratorPanel(workspaceId, record.id, !isOrchestratorPanel(record.fields))
+        return true
+      },
+    }),
     registerPanelChromeOverlay(WorktreeChip),
     registerPanelChromeOverlay(RelationToggle),
     registerPanelChromeOverlay(AgentChangesOverlay),

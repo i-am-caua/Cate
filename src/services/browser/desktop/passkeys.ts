@@ -21,6 +21,8 @@ interface NativePasskeys {
 export interface BrowserPasskeysDeps {
   /** True for guests with a bound page driver (a browser panel tab). */
   isRegistered(webContentsId: number): boolean
+  /** Loads the native addon; defaults to true. The IPC is registered either way. */
+  enabled?: boolean
 }
 
 /** The addon's path: next to the app resources when packaged, else the dev build. */
@@ -33,7 +35,7 @@ export function passkeysAddonPath(): string {
 export function registerBrowserPasskeys(deps: BrowserPasskeysDeps): { available: boolean } {
   let native: NativePasskeys | undefined
   const version = process.platform === 'darwin' ? process.getSystemVersion().split('.').map(Number) : []
-  if (version[0] > 14 || (version[0] === 14 && version[1] >= 4)) {
+  if (deps.enabled !== false && (version[0] > 14 || (version[0] === 14 && version[1] >= 4))) {
     try {
       native = createRequire(import.meta.url)(passkeysAddonPath()) as NativePasskeys
       if (!native.isAvailable()) native = undefined

@@ -60,3 +60,8 @@ export function setRelationContextMode(workspaceId: string, panelId: string, mod
   const store = relationUiHost().document(workspaceId)
   if (store) edits.setRelationContextMode(store, panelId, mode)
 }
+
+export function setOrchestratorPanel(workspaceId: string, panelId: string, enabled: boolean): void {
+  const store = relationUiHost().document(workspaceId)
+  if (store) edits.setOrchestratorPanel(store, panelId, enabled)
+}

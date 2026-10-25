@@ -10,6 +10,7 @@ export {
   updateRelationMeaning,
   moveRelation,
   removeRelation,
+  setOrchestratorPanel,
   setRelationContextMode,
 } from './actions'
 export { useRelationUi } from './state'

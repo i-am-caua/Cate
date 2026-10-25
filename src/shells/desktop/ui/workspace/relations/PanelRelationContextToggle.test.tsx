@@ -148,4 +148,13 @@ describe('PanelRelationContextToggle', () => {
     const menu = showMenu.mock.calls[0][0]
     expect(menu[0]).toEqual({ label: 'Cursor cannot take context from Cate.', enabled: false })
   })
+
+  it('toggles Orchestrator (Maestro) mode from the menu and stays visible even with 0 connected panels', async () => {
+    showMenu.mockResolvedValueOnce('orchestrator')
+    await act(async () => root.render(<PanelRelationContextToggle panel={source} workspaceId="ws" />))
+    await act(async () => { host.querySelector('button')!.click() })
+    expect(documentStoreFor('ws')!.getSnapshot().panels.source.fields.orchestrator).toBe(true)
+    expect(documentStoreFor('ws')!.getSnapshot().panels.source.fields.relationContextMode).toBe('always')
+    expect(host.querySelector('button span')!.textContent).toBe('Orchestrator · 1 panel · Always')
+  })
 })
