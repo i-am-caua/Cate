@@ -28,6 +28,7 @@ describe('commands from specs', () => {
       'version', 'panel list', 'panel create', 'panel set', 'panel close', 'editor open',
       'terminal read', 'terminal type', 'terminal press',
       'review note add', 'review note resolve', 'agent wait', 'agent start',
+      'relation list', 'relation add', 'relation remove', 'relation set', 'relation context', 'relation orchestrator',
     ]))
     // Every browser method is a command.
     expect(words).toEqual(expect.arrayContaining([
@@ -90,6 +91,9 @@ describe('parseCommandLine', () => {
     expect(call(['panel', 'close', 'ab12']).args).toEqual({ panelId: 'ab12', discard: false })
     expect(call(['panel', 'close', '--no-discard', 'ab12']).args).toEqual({ panelId: 'ab12', discard: false })
     expect(call(['agent', 'start', '--agent=codex', 'fix', 'it']).args).toMatchObject({ agentId: 'codex', prompt: 'fix it' })
+    expect(call(['agent', 'start', '--from', 'a1', '--kind', 'trigger', '--label', 'API', '--orchestrator', 'fix']).args)
+      .toMatchObject({ from: 'a1', kind: 'trigger', label: 'API', orchestrator: true })
+    expect(call(['relation', 'add', 'a1', 'b2']).args).toEqual({ from: 'a1', to: 'b2', kind: 'trigger' })
     expect(call(['review', 'note', 'add', '--file=src/a.ts', '--line', '4', '--body', 'x', '--severity', 'error']).args).toEqual({
       file: 'src/a.ts', line: 4, body: 'x', side: 'new', severity: 'error',
     })
@@ -168,6 +172,9 @@ describe('help', () => {
     )
     expect(commandHelp(find('agent send'))).toContain('  cate agent send <panelId>|--panel <panelId> <prompt...>')
     expect(commandHelp(find('agent wait'))).toContain('[<panelId...>] [--wait-timeout <ms>]')
+    expect(helpText(commands, ['relation'])).toContain('Add or re-point a relation between panels')
+    expect(commandHelp(find('relation add'))).toContain('<from> <to> [--kind')
+    expect(commandHelp(find('relation context'))).toContain('<panel> <mode>')
   })
 
   it('describes every argument and flag with its default, and nothing more', () => {
@@ -315,6 +322,34 @@ describe('runCli', () => {
       prompt: 'Fix the login', agentId: 'codex', newWorktree: 'fix-login',
     }), 92_000)
     expect(out).toEqual(['panel-01'])
+  })
+
+  it('prints a created relation on the second line and relation failures on stderr', async () => {
+    const started = deps({ call: async () => ({ panelId: 'panel-0123456789', agentId: 'codex', relationId: 'rel-0123456789' }) })
+    await runCli(['agent', 'start', '--from', 'source-panel', '--kind', 'trigger', '--label', 'API', '--orchestrator', 'Fix it'], CATE_API, started.d)
+    expect(started.out).toEqual(['panel-01\nrelation  rel-0123'])
+
+    const jsonStarted = deps({ call: async () => ({ panelId: 'panel-0123456789', agentId: 'codex', relationId: 'rel-0123456789' }) })
+    await runCli(['agent', 'start', '--kind', 'trigger', 'Fix it', '--json'], CATE_API, jsonStarted.d)
+    expect(jsonStarted.out).toEqual(['{"panelId":"panel-0123456789","agentId":"codex","relationId":"rel-0123456789"}'])
+
+    const failed = deps({ call: async () => ({ panelId: 'panel-0123456789', agentId: 'codex', warning: 'relation-cycle: the relation would close a cycle' }) })
+    await runCli(['agent', 'start', 'Fix it', '--json'], CATE_API, failed.d)
+    expect(failed.out).toEqual(['{"panelId":"panel-0123456789","agentId":"codex","warning":"relation-cycle: the relation would close a cycle"}'])
+    expect(failed.err).toEqual(['cate: warning: relation-cycle: the relation would close a cycle'])
+  })
+
+  it('prints relation rows with short panel ids', async () => {
+    const listed = deps({ call: async () => [{
+      id: 'relation-012345',
+      fromPanelId: 'source-012345',
+      toPanelId: 'worker-012345',
+      kind: 'trigger',
+      label: 'API',
+    }] })
+    await runCli(['relation', 'list'], CATE_API, listed.d)
+    expect(listed.out[0]).toContain('ID        FROM      TO        KIND     LABEL')
+    expect(listed.out[0]).toContain('relation  source-0  worker-0  trigger  API')
   })
 
   it('formats plain results as key and value lines', async () => {

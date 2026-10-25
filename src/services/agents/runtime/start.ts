@@ -7,7 +7,7 @@
 
 import { RpcError } from '@kernel/rpc/contract'
 import type { Point } from '@workspace/canvas/contract'
-import type { PlaceTarget } from '@workspace/document/contract'
+import type { PlaceTarget, RelationKind } from '@workspace/document/contract'
 import { AGENT_DEFS, AGENT_LAUNCH, AGENTS, isAgentId, type AgentId, type AgentTypeInfo } from '../contract'
 import type { AgentsCore } from './core'
 import { evaluateAgentCliHooks, inspectAgentCliHooks, resolveDriverAgent } from './hooks/readiness'
@@ -41,6 +41,10 @@ export interface AgentStartPorts {
     /** Removes a worktree this start created, when the start failed. */
     remove(worktreeId: string): Promise<void>
   }
+  relations: {
+    add(fromPanelId: string, toPanelId: string, kind: RelationKind, label?: string): string
+    setOrchestrator(panelId: string, enabled: boolean): void
+  }
 }
 
 export interface AgentStartArgs {
@@ -54,12 +58,23 @@ export interface AgentStartArgs {
   terminalPanelId?: string
   /** Default: next to the calling panel. */
   placement?: AgentPlacement
+  fromPanelId?: string
+  kind?: RelationKind
+  label?: string
+  orchestrator?: boolean
+}
+
+export interface AgentStartResult {
+  panelId: string
+  agentId: AgentId
+  relationId?: string
+  warning?: string
 }
 
 export interface AgentStarter {
   /** Starts an agent for `callerPanelId` (undefined for a client); answers
    *  with the panel that hosts it. */
-  start(callerPanelId: string | undefined, args: AgentStartArgs): Promise<{ panelId: string; agentId: AgentId }>
+  start(callerPanelId: string | undefined, args: AgentStartArgs): Promise<AgentStartResult>
   /** Every agent CLI, in registry order. */
   types(): Promise<AgentTypeInfo[]>
   /** Started agents whose CLI has not been observed yet: until its first
@@ -118,6 +133,43 @@ export function createAgentStarter(agents: AgentsCore, ports: AgentStartPorts): 
     }
   }
 
+  const finishStart = (
+    callerPanelId: string | undefined,
+    panelId: string,
+    agentId: AgentId,
+    args: StartRequest,
+  ): AgentStartResult => {
+    const warnings: string[] = []
+    if (args.orchestrator) {
+      try {
+        ports.relations.setOrchestrator(panelId, true)
+      } catch (error) {
+        warnings.push(`orchestrator was not marked: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+
+    let relationId: string | undefined
+    if (args.fromPanelId !== undefined || args.kind !== undefined || args.label !== undefined) {
+      const fromPanelId = args.fromPanelId ?? callerPanelId
+      if (!fromPanelId) {
+        warnings.push('relation-source-required: no source panel is available; pass --from <panel>')
+      } else {
+        try {
+          relationId = ports.relations.add(fromPanelId, panelId, args.kind ?? 'trigger', args.label)
+        } catch (error) {
+          warnings.push(error instanceof Error ? error.message : String(error))
+        }
+      }
+    }
+
+    return {
+      panelId,
+      agentId,
+      ...(relationId ? { relationId } : {}),
+      ...(warnings.length > 0 ? { warning: warnings.join('; ') } : {}),
+    }
+  }
+
   return {
     async start(callerPanelId, input) {
       agents.trust.requireTrusted()
@@ -144,13 +196,13 @@ export function createAgentStarter(agents: AgentsCore, ports: AgentStartPorts): 
           // launches the canonical executable and argv directly.
           await ports.terminals.relaunch(args.terminalPanelId, { ...checkout, launch })
           pending.set(args.terminalPanelId, { agentId, at: Date.now() })
-          return { panelId: args.terminalPanelId, agentId }
+          return finishStart(callerPanelId, args.terminalPanelId, agentId, args)
         }
         const chosen = args.title?.trim()
         const title = chosen || (prompt ? prompt.replace(/\s+/g, ' ').slice(0, 54) : AGENT_DEFS[agentId].displayName)
         const panelId = await ports.terminals.create({ ...checkout, title, ...(chosen ? { titleChosen: true } : {}), launch, placement })
         pending.set(panelId, { agentId, at: Date.now() })
-        return { panelId, agentId }
+        return finishStart(callerPanelId, panelId, agentId, args)
       } catch (error) {
         if (created) await ports.worktrees.remove(created.id).catch(() => {})
         throw error

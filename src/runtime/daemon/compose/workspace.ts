@@ -37,7 +37,12 @@ import { vcsCapability } from '@workspace/repository/contract'
 import { createRepositoryRuntime, vcsCapabilityImpl } from '@workspace/repository/runtime'
 import { skillsCapability, type SkillTarget } from '@workspace/skills/contract'
 import { createSkillsRuntime, skillsCapabilityImpl } from '@workspace/skills/runtime'
-import { createConnectedEditors, type SharedEditor } from '@workspace/relations/runtime'
+import {
+  addPanelRelation,
+  createConnectedEditors,
+  setPanelOrchestratorPanel,
+  type SharedEditor,
+} from '@workspace/relations/runtime'
 import { RELATION_CONTEXT_MODE_FIELD, relationChangeProblem, type RelationRoleOf } from '@workspace/relations/contract'
 import { processCapability } from '@services/terminal/contract'
 import {
@@ -49,7 +54,7 @@ import {
 import { browserDataCapability } from '@services/browser/contract'
 import { browserDataCapabilityImpl, createBrowserDataRuntime } from '@services/browser/runtime'
 import { AGENTS, agentsCapability } from '@services/agents/contract'
-import { agentApi } from '@services/agents/contract/api'
+import { agentApi, relationApi } from '@services/agents/contract/api'
 import { notificationsCapability } from '@workspace/notifications/contract'
 import { createNotifications, notificationsCapabilityImpl } from '@workspace/notifications/runtime'
 import { CATE_API } from '@panels/api'
@@ -279,6 +284,7 @@ export function composeWorkspace(deps: WorkspaceDeps) {
     },
     env: baseEnv,
     document: agentsDocument(document),
+    relationDocument: document,
     resolveCheckout,
     snapshot: snapshotProcessTree,
     notify: (event) => notifications.publish(event),
@@ -297,6 +303,11 @@ export function composeWorkspace(deps: WorkspaceDeps) {
           await repository.removeWorktree({ worktreeId, force: true, deleteBranch: true })
         },
       },
+      relations: {
+        add: (fromPanelId, toPanelId, kind, label) =>
+          addPanelRelation(document, (type) => relationRole(type), fromPanelId, toPanelId, kind, label),
+        setOrchestrator: (panelId, enabled) => setPanelOrchestratorPanel(document, panelId, enabled),
+      },
     },
   })
 
@@ -305,6 +316,7 @@ export function composeWorkspace(deps: WorkspaceDeps) {
 
   offs.push(registerKernelApi(router))
   offs.push(router.registerService(agentApi, agentsRuntime.apiHandlers()))
+  offs.push(router.registerService(relationApi, agentsRuntime.relationApiHandlers()))
 
   // ---- Panels -----------------------------------------------------------------
 

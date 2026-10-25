@@ -15,6 +15,7 @@ let hookConfig: AgentHookConfig
 let ports: {
   terminals: { create: ReturnType<typeof vi.fn>; relaunch: ReturnType<typeof vi.fn>; state: ReturnType<typeof vi.fn> }
   worktrees: { create: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn> }
+  relations: { add: ReturnType<typeof vi.fn>; setOrchestrator: ReturnType<typeof vi.fn> }
 }
 
 const panels: PanelRecord[] = [
@@ -62,6 +63,7 @@ beforeEach(() => {
       state: vi.fn((panelId: string) => (panelId === 'idle' ? { alive: true, busy: false } : null)),
     },
     worktrees: { create: vi.fn(async (name: string) => ({ id: `wt-${name}`, path: `/repo/.cate/worktrees/${name}` })), remove: vi.fn(async () => {}) },
+    relations: { add: vi.fn(() => 'relation-123'), setOrchestrator: vi.fn() },
   }
 })
 
@@ -90,6 +92,7 @@ describe('agent start', () => {
       launch: { kind: 'agents.start', params: { agentId: 'codex', prompt: 'Fix the login' } },
       placement: { near: 'supervisor' },
     })
+    expect(ports.relations.add).not.toHaveBeenCalled()
   })
 
   it('opens the interactive session at a picked spot without a prompt, titled by the agent', async () => {
@@ -105,6 +108,32 @@ describe('agent start', () => {
   it('marks a title the caller chose, so the agent never retitles the panel', async () => {
     await starter().start('supervisor', { prompt: 'Fix the login', title: '  Alpha ' })
     expect(ports.terminals.create).toHaveBeenCalledWith(expect.objectContaining({ title: 'Alpha', titleChosen: true }))
+  })
+
+  it('marks a new orchestrator and links a worker from the caller by default', async () => {
+    await expect(starter().start('supervisor', {
+      prompt: 'Fix the API',
+      kind: 'trigger',
+      label: 'API',
+      orchestrator: true,
+    })).resolves.toEqual({ panelId: 'new-terminal', agentId: 'codex', relationId: 'relation-123' })
+    expect(ports.relations.setOrchestrator).toHaveBeenCalledWith('new-terminal', true)
+    expect(ports.relations.add).toHaveBeenCalledWith('supervisor', 'new-terminal', 'trigger', 'API')
+  })
+
+  it('uses an explicit relation source when --from is supplied', async () => {
+    await starter().start('supervisor', { prompt: 'Review it', fromPanelId: 'term-source', kind: 'verify' })
+    expect(ports.relations.add).toHaveBeenCalledWith('term-source', 'new-terminal', 'verify', undefined)
+  })
+
+  it('returns the started panel and a warning when its requested relation fails', async () => {
+    ports.relations.add.mockImplementationOnce(() => { throw new Error('relation-cycle: the relation would close a cycle') })
+    await expect(starter().start('supervisor', { prompt: 'Fix it', kind: 'trigger' })).resolves.toEqual({
+      panelId: 'new-terminal',
+      agentId: 'codex',
+      warning: 'relation-cycle: the relation would close a cycle',
+    })
+    expect(ports.terminals.create).toHaveBeenCalled()
   })
 
   it('counts a started agent as starting until its terminal stops or its CLI is observed', async () => {

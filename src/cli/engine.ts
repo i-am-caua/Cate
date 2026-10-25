@@ -400,7 +400,7 @@ function wrap(text: string, width: number): string[] {
 function columns(rows: readonly [string, string][], style: HelpStyle): string[] {
   const indent = 2
   const left = Math.min(Math.max(...rows.map(([name]) => name.length)) + 2, 30)
-  const right = Math.max(style.width - indent - left, 30)
+  const right = Math.max(style.width - indent - left, 10)
   const out: string[] = []
   for (const [name, text] of rows) {
     const lines = text ? wrap(text, right) : ['']
@@ -640,6 +640,8 @@ export async function runCli(
     port = deps.connect(socketPath, token)
     const timeoutMs = cateApiTimeoutMs(method, parsed.args) + CLIENT_TIMEOUT_SLACK_MS
     const value = await port.call(method.method, parsed.args, timeoutMs)
+    const warning = value && typeof value === 'object' ? (value as { warning?: unknown }).warning : undefined
+    if (typeof warning === 'string' && warning.length > 0) deps.stderr(`cate: warning: ${warning}`)
     if (parsed.json) {
       deps.stdout(JSON.stringify(value ?? null))
     } else {

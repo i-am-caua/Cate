@@ -5,9 +5,11 @@
 import {
   ArgError,
   arr,
+  bool,
   defineCateApi,
   defineCliArea,
   num,
+  oneOf,
   obj,
   opt,
   panel,
@@ -43,13 +45,13 @@ export const agentCliArea = defineCliArea({
     key: 'cliAgentReadEnabled',
     code: 'agent-read-disabled',
     detail:
-      '`cate agent types / list / wait / read` and `cate review inspect`: observe workers, their conversations and terminal output, and review state.',
+      '`cate agent types / list / wait / read`, `cate relation list` and `cate review inspect`: observe workers, their conversations and terminal output, relations and review state.',
   },
   control: {
     key: 'cliAgentControlEnabled',
     code: 'agent-control-disabled',
     detail:
-      '`cate agent start / send / interrupt` and `cate review note / complete`: start and steer terminal agents and record review results.',
+      '`cate agent start / send / interrupt`, `cate relation add / remove / set / context / orchestrator` and `cate review note / complete`: start and steer terminal agents, draw and update relations, and record review results.',
   },
 })
 
@@ -69,6 +71,11 @@ export const agentApi = defineCateApi(
         newWorktree: opt(str).flag('new-worktree', 'name').help('Create a worktree with this name and run in it'),
         canvasPanelId: opt(panel('canvas')).flag('canvas', 'id')
           .help('Place the panel on this canvas panel\'s canvas (default: next to the calling panel)'),
+        from: opt(panel()).flag('from', 'panel').help('Source panel for a relation (default: the calling panel)'),
+        kind: opt(oneOf('use', 'context', 'verify', 'trigger')).helpDefault('trigger')
+          .help('Relation kind (default trigger when linking)'),
+        label: opt(str).help('Label for the new relation'),
+        orchestrator: opt(bool, false).help('Mark the new panel as an orchestrator'),
         position: opt(obj({ x: num, y: num })).hidden(),
       },
       timeoutMs: 90_000,
@@ -130,4 +137,64 @@ export const agentApi = defineCateApi(
     },
   },
   { area: agentCliArea, summary: 'Start agents, and observe and prompt the agents running in panels' },
+)
+
+export const relationApi = defineCateApi(
+  'relation',
+  {
+    list: {
+      access: 'read',
+      handler: 'service',
+      summary: 'List panel relations',
+      format: 'relationList',
+    },
+    add: {
+      access: 'control',
+      handler: 'service',
+      summary: 'Add or re-point a relation between panels',
+      args: {
+        from: panel().pos('from').help('Source panel id or unique prefix'),
+        to: panel().pos('to').help('Target panel id or unique prefix'),
+        kind: opt(oneOf('use', 'context', 'verify', 'trigger'), 'trigger')
+          .help('Relation kind (default trigger)'),
+        label: opt(str).help('Label for the relation'),
+      },
+      format: 'relationAdded',
+    },
+    remove: {
+      access: 'control',
+      handler: 'service',
+      summary: 'Remove a relation',
+      args: { relationId: str.nonEmpty().pos('relation-id').help('Relation id or unique prefix, from cate relation list --json') },
+    },
+    set: {
+      access: 'control',
+      handler: 'service',
+      summary: 'Set a relation kind or label',
+      args: {
+        relationId: str.nonEmpty().pos('relation-id').help('Relation id or unique prefix, from cate relation list --json'),
+        kind: opt(oneOf('use', 'context', 'verify', 'trigger')).help('New relation kind'),
+        label: opt(str).help('New label; an empty label clears it'),
+      },
+    },
+    context: {
+      access: 'control',
+      handler: 'service',
+      summary: 'Set how a panel receives relation context',
+      args: {
+        panelId: panel().pos('panel').help('Panel id or unique prefix'),
+        mode: oneOf('once', 'always', 'off').pos('mode').help('Context mode'),
+      },
+    },
+    orchestrator: {
+      access: 'control',
+      handler: 'service',
+      summary: 'Mark or unmark an orchestrator panel',
+      args: {
+        panelId: panel().pos('panel').help('Panel id or unique prefix'),
+        state: oneOf('on', 'off').pos('state').help('Whether the panel is an orchestrator'),
+      },
+    },
+  },
+  { area: agentCliArea, summary: 'List and edit panel relations and orchestrator routing' },
 )

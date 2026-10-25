@@ -13,8 +13,8 @@ import type {
   AgentSendResult,
   agentsCapability,
 } from '../contract'
-import type { agentApi } from '../contract/api'
-import { createAgentApiHandlers } from './api'
+import type { agentApi, relationApi } from '../contract/api'
+import { createAgentApiHandlers, createRelationApiHandlers } from './api'
 import { agentsCapabilityImpl } from './capability'
 import { createAgentsCore, type AgentsCoreDeps } from './core'
 import { evaluateAgentCliHooks, inspectAgentCliHooks } from './hooks/readiness'
@@ -22,12 +22,15 @@ import { createTerminalAgents, type AgentTerminalService, type TerminalAgents } 
 import { createAgentStarter, type AgentStartArgs, type AgentStartPorts } from './start'
 import { AGENT_SESSION_STORES } from './sessions'
 import { createAgentUsage, type AgentUsageDeps } from './usage/usage'
+import type { RelationRuntimeDocument } from '@workspace/relations/runtime'
 
 export interface AgentsRuntimeDeps extends AgentsCoreDeps {
   /** The terminal service: the terminal agents plug into its extension points. */
   terminal: AgentTerminalService
   /** What starting an agent needs from panels and worktrees. */
   start: AgentStartPorts
+  /** The shared document used by relation CLI operations. */
+  relationDocument: RelationRuntimeDocument
   /** The environment the agent CLIs run with (limit probes). */
   env(): NodeJS.ProcessEnv
   /** Tests: the usage service's rate fetch and clock. */
@@ -36,7 +39,7 @@ export interface AgentsRuntimeDeps extends AgentsCoreDeps {
 
 export interface AgentsRuntime {
   /** Starts an agent for `callerPanelId` (undefined for a client). */
-  start(callerPanelId: string | undefined, args: AgentStartArgs): Promise<{ panelId: string; agentId: AgentId }>
+  start(callerPanelId: string | undefined, args: AgentStartArgs): Promise<{ panelId: string; agentId: AgentId; relationId?: string; warning?: string }>
   send(panelId: string, prompt: string): Promise<AgentSendResult>
   /** Panels whose agent is running a turn. */
   busy(): string[]
@@ -50,6 +53,7 @@ export interface AgentsRuntime {
   /** The `agents` capability and the `cate.agent.*` handlers. */
   capability(): CapabilityImpl<typeof agentsCapability>
   apiHandlers(): CateServiceHandlers<typeof agentApi>
+  relationApiHandlers(): CateServiceHandlers<typeof relationApi>
   dispose(): void
 }
 
@@ -82,6 +86,7 @@ export function createAgentsRuntime(deps: AgentsRuntimeDeps): AgentsRuntime {
     onSessionEnded: (listener) => terminals.onExit((panelId) => listener(panelId)),
     capability: () => agentsCapabilityImpl(core, starter, usage),
     apiHandlers: () => createAgentApiHandlers(core, starter),
+    relationApiHandlers: () => createRelationApiHandlers(deps.relationDocument, deps.relationRole),
     dispose: () => core.dispose(),
   }
 }

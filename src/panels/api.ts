@@ -4,7 +4,7 @@
 
 import { versionApi, type CateApiNamespace } from '@kernel/api/contract'
 import { canvasApi, panelApi } from '@workspace/document/contract/api'
-import { agentApi } from '@services/agents/contract/api'
+import { agentApi, relationApi } from '@services/agents/contract/api'
 import { terminalApi } from './terminal/contract/api'
 import { browserApi } from '@services/browser/contract/api'
 import { editorApi } from './editor/contract/api'
@@ -19,4 +19,5 @@ export const CATE_API: readonly CateApiNamespace<any>[] = [
   editorApi,
   reviewApi,
   agentApi,
+  relationApi,
 ]

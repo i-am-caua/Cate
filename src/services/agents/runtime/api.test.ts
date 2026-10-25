@@ -2,11 +2,12 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { isRpcError } from '@kernel/rpc/contract'
+import { isRpcError, RpcError } from '@kernel/rpc/contract'
 import type { ApiHandlerContext } from '@kernel/api/contract'
-import type { PanelRecord } from '@workspace/document/contract'
+import { applyOp, createDocument, MAIN_WINDOW, type DocChange, type PanelRecord } from '@workspace/document/contract'
+import type { RelationRuntimeDocument } from '@workspace/relations/runtime'
 import type { PanelAgentState } from '../contract'
-import { createAgentApiHandlers } from './api'
+import { createAgentApiHandlers, createRelationApiHandlers } from './api'
 import { agentsCapabilityImpl } from './capability'
 import { createAgentsCore, type AgentsCore, type AgentTerminals } from './core'
 import type { AgentStarter } from './start'
@@ -169,13 +170,97 @@ describe('cate.agent.*', () => {
 
 describe('cate.agent.start', () => {
   it('starts for the calling panel, on the canvas it names', async () => {
-    await handlers.start({ prompt: 'Fix it', canvasPanelId: 'canvas', position: { x: 10, y: 20 } }, ctx())
+    await handlers.start({ prompt: 'Fix it', canvasPanelId: 'canvas', position: { x: 10, y: 20 }, orchestrator: false }, ctx())
     expect(starter.start).toHaveBeenCalledWith('supervisor', { prompt: 'Fix it', placement: { near: 'canvas', position: { x: 10, y: 20 } } })
   })
 
   it('leaves the place to the starter without a canvas, and starts for a client without a panel', async () => {
-    await handlers.start({ prompt: 'Fix it', agentId: 'codex' }, ctx({ kind: 'client', panelId: undefined }))
+    await handlers.start({ prompt: 'Fix it', agentId: 'codex', orchestrator: false }, ctx({ kind: 'client', panelId: undefined }))
     expect(starter.start).toHaveBeenCalledWith(undefined, { prompt: 'Fix it', agentId: 'codex' })
+  })
+
+  it('passes relation and orchestrator flags through to the starter', async () => {
+    await handlers.start({
+      prompt: 'Fix it',
+      from: 'term',
+      kind: 'trigger',
+      label: 'Backend',
+      orchestrator: true,
+    }, ctx())
+    expect(starter.start).toHaveBeenCalledWith('supervisor', {
+      prompt: 'Fix it',
+      fromPanelId: 'term',
+      kind: 'trigger',
+      label: 'Backend',
+      orchestrator: true,
+    })
+  })
+})
+
+function relationApiHarness() {
+  let doc = createDocument()
+  const document: RelationRuntimeDocument = {
+    get: () => doc,
+    apply(change: DocChange) {
+      const result = applyOp(doc, change)
+      if (result.error) throw new RpcError(result.error.code, result.error.message)
+      doc = result.doc
+      return 1
+    },
+  }
+  const addPanel = (id: string, type: 'terminal' | 'surface') => {
+    document.apply({
+      kind: 'addPanel',
+      record: { id, type, title: id, fields: {} },
+      at: { to: 'stack', dock: { windowId: MAIN_WINDOW }, stackId: 'main-stack' },
+    })
+  }
+  addPanel('term-a', 'terminal')
+  addPanel('term-b', 'terminal')
+  addPanel('term-c', 'terminal')
+  addPanel('surface-a', 'surface')
+  const roleOf = (type: string) => type === 'terminal' ? { execution: true } : undefined
+  return { document, handlers: createRelationApiHandlers(document, roleOf) }
+}
+
+describe('cate.relation.*', () => {
+  it('lists full relation records and adds a relation with its default kind', async () => {
+    const { handlers, document } = relationApiHarness()
+    const added = await handlers.add({ from: 'term-a', to: 'term-b', kind: 'trigger' }, ctx()) as { relationId: string }
+    expect(added.relationId).toBeTruthy()
+    expect(document.get().relations[added.relationId]).toMatchObject({
+      fromPanelId: 'term-a', toPanelId: 'term-b', kind: 'trigger',
+    })
+    expect(handlers.list({}, ctx())).toEqual([document.get().relations[added.relationId]])
+  })
+
+  it('re-points an existing pair and rejects a cycle or a panel without a relation role', async () => {
+    const { handlers, document } = relationApiHarness()
+    const first = await handlers.add({ from: 'term-a', to: 'term-b', kind: 'context' }, ctx()) as { relationId: string }
+    expect(handlers.add({ from: 'term-a', to: 'term-b', kind: 'verify' }, ctx())).toEqual(first)
+    expect(document.get().relations[first.relationId].kind).toBe('verify')
+    await handlers.add({ from: 'term-b', to: 'term-c', kind: 'trigger' }, ctx())
+    expect(() => handlers.add({ from: 'term-c', to: 'term-a', kind: 'trigger' }, ctx())).toThrow(/^relation-cycle:/)
+    expect(() => handlers.add({ from: 'surface-a', to: 'term-a', kind: 'trigger' }, ctx())).toThrow(/^relation-panel-ineligible:/)
+  })
+
+  it('sets a relation kind and label, then removes it by unique prefix', async () => {
+    const { handlers, document } = relationApiHarness()
+    const { relationId } = await handlers.add({ from: 'term-a', to: 'term-b', kind: 'trigger' }, ctx()) as { relationId: string }
+    expect(handlers.set({ relationId: relationId.slice(0, 8), kind: 'verify', label: 'Review' }, ctx())).toEqual({ ok: true })
+    expect(document.get().relations[relationId]).toMatchObject({ kind: 'verify', label: 'Review' })
+    expect(handlers.remove({ relationId: relationId.slice(0, 8) }, ctx())).toEqual({ ok: true })
+    expect(document.get().relations).toEqual({})
+  })
+
+  it('sets context mode and turns orchestrator routing on and off', async () => {
+    const { handlers, document } = relationApiHarness()
+    await handlers.context({ panelId: 'term-a', mode: 'always' }, ctx())
+    expect(document.get().panels['term-a'].fields.relationContextMode).toBe('always')
+    await handlers.orchestrator({ panelId: 'term-a', state: 'on' }, ctx())
+    expect(document.get().panels['term-a'].fields).toMatchObject({ orchestrator: true, relationContextMode: 'always' })
+    await handlers.orchestrator({ panelId: 'term-a', state: 'off' }, ctx())
+    expect(document.get().panels['term-a'].fields.orchestrator).toBeUndefined()
   })
 })
 

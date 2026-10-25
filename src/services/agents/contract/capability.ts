@@ -4,7 +4,7 @@ import type { AgentHookAgentState } from './hooks'
 import type { PanelAgentState } from './session'
 import type { AgentId } from './registry'
 import type { AgentTypeInfo } from './launch'
-import type { PlaceTarget } from '@workspace/document/contract'
+import type { PlaceTarget, RelationKind } from '@workspace/document/contract'
 import type { UsageLimitsReport, UsagePricing, UsageSummary, UsageSummaryInput } from './usage/types'
 
 /** Starting an agent from a client, as `cate agent start` does from a
@@ -18,6 +18,10 @@ export interface AgentStartRequest {
   newWorktree?: string
   canvasPanelId?: string
   position?: { x: number; y: number }
+  from?: string
+  kind?: RelationKind
+  label?: string
+  orchestrator?: boolean
   /** A spot the client already picked (the placement picker). */
   at?: PlaceTarget
 }
@@ -50,7 +54,7 @@ export const agentsCapability = defineCapability('agents', {
     /** Agents running a turn right now (closing their panels interrupts them). */
     busy: method<void, { panelIds: string[] }>(),
     /** The same functions as `cate agent start / types / send / interrupt`. */
-    start: method<AgentStartRequest, { panelId: string; agentId: AgentId | null }>({ mutates: true, timeoutMs: 90_000 }),
+    start: method<AgentStartRequest, { panelId: string; agentId: AgentId | null; relationId?: string; warning?: string }>({ mutates: true, timeoutMs: 90_000 }),
     types: method<void, AgentTypeInfo[]>(),
     send: method<{ panelId: string; prompt: string }, { ok: true }>({ mutates: true, timeoutMs: 20_000 }),
     interrupt: method<{ panelId: string }, { ok: true }>({ mutates: true }),

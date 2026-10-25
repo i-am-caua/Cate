@@ -70,6 +70,21 @@ function agentRuns(value: unknown): string {
   }))
 }
 
+function relationList(value: unknown): string {
+  if (!Array.isArray(value)) return generic(value)
+  if (value.length === 0) return '(no relations)'
+  return table(['ID', 'FROM', 'TO', 'KIND', 'LABEL'], value.map((item) => {
+    const relation = asObject(item) ?? {}
+    return [
+      shortId(text(relation.id) || '?'),
+      shortId(text(relation.fromPanelId) || '?'),
+      shortId(text(relation.toPanelId) || '?'),
+      text(relation.kind),
+      text(relation.label),
+    ]
+  }))
+}
+
 function conversation(value: unknown): string {
   const object = asObject(value)
   if (!object || !Array.isArray(object.messages)) return generic(value)
@@ -138,6 +153,11 @@ function browserLog<T>(describe: (entries: T[]) => string) {
 const FORMATTERS: Record<string, (value: unknown) => string> = {
   panelList,
   agentRuns,
+  relationList,
+  relationAdded: (value) => {
+    const relationId = asObject(value)?.relationId
+    return typeof relationId === 'string' ? `relation  ${shortId(relationId)}` : generic(value)
+  },
   agentWait: (value) => {
     const result = asObject(value)
     const runs = agentRuns(result?.agents)
@@ -156,8 +176,11 @@ const FORMATTERS: Record<string, (value: unknown) => string> = {
     return typeof text === 'string' ? text : generic(value)
   },
   createdPanel: (value) => {
-    const panelId = asObject(value)?.panelId
-    return typeof panelId === 'string' ? shortId(panelId) : generic(value)
+    const object = asObject(value)
+    const panelId = object?.panelId
+    const relationId = object?.relationId
+    if (typeof panelId !== 'string') return generic(value)
+    return `${shortId(panelId)}${typeof relationId === 'string' ? `\nrelation  ${shortId(relationId)}` : ''}`
   },
   panelTarget: (value) => {
     const panelId = asObject(value)?.panelId

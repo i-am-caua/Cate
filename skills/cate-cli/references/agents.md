@@ -30,6 +30,27 @@ worktree (`--worktree <id>`, from `cate panel list --json`) or a new one
 panel's canvas instead. `--title` names the panel permanently; without it the
 agent's own session title replaces the prompt-based one.
 
+`--from <panel>`, `--kind use|context|verify|trigger` and `--label <text>`
+create a relation from the source panel to the new agent. The source defaults
+to the calling panel, the kind defaults to `trigger`, and the relation is only
+created when at least one of these flags is given. A trigger relation tells
+the worker to report back to the source with `cate agent send`. `--orchestrator`
+marks the new panel as an orchestrator and keeps its relation context on.
+
+An orchestrator can start role-labeled workers, wait until they are ready, and
+read their conversations:
+
+```bash
+worker=$(cate agent start --from <orchestrator-panel> --kind trigger --label "API" "Implement the API")
+cate agent wait "$worker"
+cate agent read "$worker"
+```
+
+Use `cate agent start --orchestrator` when creating the coordinator panel.
+With no relation flags, start keeps its usual panel-only output. If a requested
+relation cannot be created, start still returns the panel and prints a warning
+on stderr; `--json` includes `relationId` when the relation was created.
+
 Until the agent CLI is up, the panel is listed as `starting`: `wait` waits
 for it, while `send`, `read` and `interrupt` fail with `agent-starting`.
 From then on it is an agent panel like any other.

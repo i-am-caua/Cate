@@ -3,10 +3,19 @@
 
 import { RpcError } from '@kernel/rpc/contract'
 import type { CateServiceHandlers } from '@kernel/api/contract'
-import type { agentApi } from '../contract/api'
+import type { agentApi, relationApi } from '../contract/api'
 import { AGENT_DEFS, type AgentId, type AgentStartRequest, type PanelAgentState } from '../contract'
 import type { AgentsCore } from './core'
 import type { AgentStarter } from './start'
+import type { RelationRoleOf } from '@workspace/relations/contract'
+import {
+  addPanelRelation,
+  removePanelRelation,
+  setPanelOrchestratorPanel,
+  setPanelRelationContextMode,
+  updatePanelRelation,
+  type RelationRuntimeDocument,
+} from '@workspace/relations/runtime'
 
 function summary(agents: AgentsCore, state: PanelAgentState) {
   return {
@@ -68,9 +77,16 @@ function live(agents: AgentsCore, panelId: string): PanelAgentState {
 /** Starts an agent for a caller panel (a client: none), placing it on a
  *  canvas when asked: `cate agent start` and the agents capability. */
 export function startAgent(starter: AgentStarter, callerPanelId: string | undefined, request: AgentStartRequest) {
-  const { canvasPanelId, position, at, ...args } = request
+  const { canvasPanelId, position, at, from, kind, label, orchestrator, ...args } = request
   const placement = at ? { at } : canvasPanelId ? { near: canvasPanelId, ...(position ? { position } : {}) } : undefined
-  return starter.start(callerPanelId, { ...args, ...(placement ? { placement } : {}) })
+  return starter.start(callerPanelId, {
+    ...args,
+    ...(from !== undefined ? { fromPanelId: from } : {}),
+    ...(kind !== undefined ? { kind } : {}),
+    ...(label !== undefined ? { label } : {}),
+    ...(orchestrator ? { orchestrator: true } : {}),
+    ...(placement ? { placement } : {}),
+  })
 }
 
 /** A prompt to a live agent panel: `cate agent send` and the capability. */
@@ -121,6 +137,32 @@ export function createAgentApiHandlers(agents: AgentsCore, starter: AgentStarter
     interrupt: async ({ targetPanelId }) => {
       refuseStarting(starter, targetPanelId)
       return interruptAgent(agents, targetPanelId)
+    },
+  }
+}
+
+export function createRelationApiHandlers(
+  document: RelationRuntimeDocument,
+  roleOf: RelationRoleOf,
+): CateServiceHandlers<typeof relationApi> {
+  return {
+    list: () => Object.values(document.get().relations),
+    add: ({ from, to, kind, label }) => ({ relationId: addPanelRelation(document, roleOf, from, to, kind, label) }),
+    remove: ({ relationId }) => {
+      removePanelRelation(document, relationId)
+      return { ok: true }
+    },
+    set: ({ relationId, kind, label }) => {
+      updatePanelRelation(document, relationId, { kind, label })
+      return { ok: true }
+    },
+    context: ({ panelId, mode }) => {
+      setPanelRelationContextMode(document, panelId, mode)
+      return { ok: true }
+    },
+    orchestrator: ({ panelId, state }) => {
+      setPanelOrchestratorPanel(document, panelId, state === 'on')
+      return { ok: true }
     },
   }
 }

@@ -106,6 +106,23 @@ cate editor active                       # which file the target editor shows
 open next to the calling terminal. Only pass `--discard` when the person
 agreed to lose that work.
 
+## Relations
+
+Relations draw the flow between panels and tell agents what to use, reference,
+verify or hand off. Panel ids may be full ids or unique prefixes:
+
+```bash
+cate relation list
+cate relation add <from> <to> --kind trigger --label "Implement API"
+cate relation set <relation-id> --kind verify --label "Check the result"
+cate relation context <panel> always
+cate relation orchestrator <panel> on
+cate relation remove <relation-id>
+```
+
+`cate relation list --json` returns full panel and relation ids. Relations
+cannot include a panel type without a relation role or create a cycle.
+
 ## Reading terminals
 
 ```bash
