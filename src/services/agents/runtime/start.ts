@@ -50,6 +50,8 @@ export interface AgentStartPorts {
 export interface AgentStartArgs {
   /** Absent: the agent's interactive session, waiting for its first prompt. */
   prompt?: string
+  model?: string
+  effort?: string
   agentId?: string
   title?: string
   worktreeId?: string
@@ -84,6 +86,7 @@ export interface AgentStarter {
 
 /** How long a started agent counts as starting before its CLI is observed. */
 const START_GRACE_MS = 60_000
+const SAFE_MODEL_OR_EFFORT = /^[A-Za-z0-9][A-Za-z0-9._:/#-]{0,127}$/
 
 function fail(code: string): never {
   throw new RpcError('rejected', code)
@@ -176,6 +179,10 @@ export function createAgentStarter(agents: AgentsCore, ports: AgentStartPorts): 
       const prompt = input.prompt?.trim()
       if (prompt === '') fail('prompt-required')
       if (prompt?.includes('\0')) fail('invalid-prompt')
+      const model = input.model?.trim()
+      if (input.model !== undefined && (!model || !SAFE_MODEL_OR_EFFORT.test(model))) fail('invalid-model')
+      const effort = input.effort?.trim()
+      if (input.effort !== undefined && (!effort || !SAFE_MODEL_OR_EFFORT.test(effort))) fail('invalid-effort')
       if (input.agentId !== undefined && !isAgentId(input.agentId)) fail('unsupported-agent')
       if (input.worktreeId && input.newWorktree) fail('choose-worktreeId-or-newWorktree')
       const args = input as StartRequest
@@ -189,7 +196,7 @@ export function createAgentStarter(agents: AgentsCore, ports: AgentStartPorts): 
 
       const created = args.newWorktree ? await ports.worktrees.create(args.newWorktree) : null
       const checkout = created ? { cwd: created.path, worktreeId: created.id } : existing!
-      const launch = { kind: AGENT_LAUNCH.start, params: { agentId, ...(prompt ? { prompt } : {}) } }
+      const launch = { kind: AGENT_LAUNCH.start, params: { agentId, ...(prompt ? { prompt } : {}), ...(model ? { model } : {}), ...(effort ? { effort } : {}) } }
       try {
         if (args.terminalPanelId) {
           // Reuse the panel, not its shell process: restarting the PTY

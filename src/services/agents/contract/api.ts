@@ -61,9 +61,11 @@ export const agentApi = defineCateApi(
     start: {
       access: 'control',
       handler: 'service',
-      summary: 'Start an agent on a prompt in a new terminal panel',
+      summary: 'Start an agent session in a new terminal panel',
       args: {
-        prompt: str.nonEmpty().maxLength(50_000).rest('prompt').help('The first prompt'),
+        prompt: opt(str.nonEmpty().maxLength(50_000)).rest('prompt').help('The first prompt (omit to open an interactive session)'),
+        model: opt(str.nonEmpty().maxLength(128)).flag('model', 'name').help('Model for the agent session'),
+        effort: opt(str.nonEmpty().maxLength(32)).flag('effort', 'level').help('Reasoning effort level (low, medium, high, xhigh, max)'),
         agentId: opt(str).flag('agent', 'id')
           .help('Agent CLI: claude-code, codex, cursor, grok, kiro or opencode (default: one set up in this workspace)'),
         title: opt(str.maxLength(80)).help('Panel title, at most 80 characters'),

@@ -73,8 +73,13 @@ function validateSetup(value: unknown): CateSetup {
       refuse('nodes[' + index + '].title must contain 1 to 80 characters')
     }
     if (typeof node.orchestrator !== 'boolean') refuse('nodes[' + index + '].orchestrator must be boolean')
-    if (typeof node.prompt !== 'string' || !node.prompt.trim() || node.prompt.length > 50_000) {
-      refuse('nodes[' + index + '].prompt must contain 1 to 50000 characters')
+    if (node.prompt !== undefined && (typeof node.prompt !== 'string' || node.prompt.length > 50_000)) {
+      refuse('nodes[' + index + '].prompt must be a string of at most 50000 characters')
+    }
+    for (const field of ['model', 'effort', 'tier'] as const) {
+      if (node[field] !== undefined && (typeof node[field] !== 'string' || !node[field].trim())) {
+        refuse('nodes[' + index + '].' + field + ' must be a non-empty string')
+      }
     }
     if (node.worktree !== null && (typeof node.worktree !== 'string' || !node.worktree.trim())) {
       refuse('nodes[' + index + '].worktree must be null or a non-empty string')
@@ -247,19 +252,29 @@ export function createSetupsRuntime(deps: SetupsRuntimeDeps) {
     return { ok: true, setupId, scope }
   }
 
-  async function apply(setupId: string, canvasPanelId?: string) {
+  async function apply(setupId: string, canvasPanelId?: string, task?: string) {
     const setup = await find(setupId)
 
     const panels: Record<string, string> = {}
     for (const node of setup.nodes) {
-      const args: AgentStartArgs = {
+      const baseArgs = {
         agentId: node.agent,
         title: node.title,
-        ...(node.prompt.trim() ? { prompt: node.prompt } : {}),
-        ...(node.worktree !== null ? { newWorktree: node.worktree } : {}),
+        ...(node.orchestrator && task?.trim() ? { prompt: task.trim() } : {}),
+        ...(node.model ? { model: node.model } : {}),
+        ...(node.effort ? { effort: node.effort } : {}),
         ...(canvasPanelId ? { placement: { near: canvasPanelId } } : {}),
+      } as AgentStartArgs
+      let started: { panelId: string }
+      if (node.worktree !== null) {
+        try {
+          started = await deps.agents.start(undefined, { ...baseArgs, newWorktree: node.worktree })
+        } catch {
+          started = await deps.agents.start(undefined, baseArgs)
+        }
+      } else {
+        started = await deps.agents.start(undefined, baseArgs)
       }
-      const started = await deps.agents.start(undefined, args)
       panels[node.id] = started.panelId
       if (node.orchestrator) setPanelOrchestratorPanel(deps.document, started.panelId, true)
     }
@@ -283,7 +298,7 @@ export function createSetupsRuntime(deps: SetupsRuntimeDeps) {
       return {
         list: () => list(),
         show: ({ setupId }) => find(setupId),
-        apply: ({ setupId, canvasPanelId }) => apply(setupId, canvasPanelId),
+        apply: ({ setupId, canvasPanelId, task }) => apply(setupId, canvasPanelId, task),
         save: (args) => save(args),
         'import': ({ file }) => importSetup(file),
         delete: ({ setupId, global }) => remove(setupId, global),

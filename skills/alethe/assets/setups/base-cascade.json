@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "id": "base-cascade",
+  "name": "Cascade (base)",
+  "source": "alethe",
+  "nodes": [
+    {
+      "id": "lead",
+      "agent": "agy",
+      "model": "gemini-4-argon-medium",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "Orquestrador (Argon)",
+      "orchestrator": true,
+      "prompt": "Orquestrar as fases do playbook usando Gemini 4 Argon.\n\nBrief the cheap attempt and name the automatic check that decides.",
+      "worktree": null,
+      "mode": "read-only"
+    },
+    {
+      "id": "try-cheap",
+      "agent": "agy",
+      "model": "gemini-3.8-flash-low",
+      "effort": "low",
+      "tier": "cheap",
+      "title": "attempt",
+      "orchestrator": false,
+      "mode": "write",
+      "worktree": null,
+      "prompt": "Make the change and run the check."
+    },
+    {
+      "id": "try-standard",
+      "agent": "agy",
+      "model": "gemini-4-argon-medium",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "attempt",
+      "orchestrator": false,
+      "mode": "write",
+      "worktree": null,
+      "prompt": "Start fresh from the failure excerpt, not from the cheap attempt's transcript."
+    },
+    {
+      "id": "try-strong",
+      "agent": "agy",
+      "model": "gemini-4-argon-high",
+      "effort": "high",
+      "tier": "strong",
+      "title": "attempt",
+      "orchestrator": false,
+      "mode": "write",
+      "worktree": null,
+      "prompt": "One last attempt with both failure excerpts; report the result either way."
+    }
+  ],
+  "edges": [
+    {
+      "from": "lead",
+      "to": "try-cheap",
+      "kind": "trigger",
+      "label": "attempt"
+    },
+    {
+      "from": "try-cheap",
+      "to": "try-standard",
+      "kind": "trigger",
+      "label": "attempt"
+    },
+    {
+      "from": "try-standard",
+      "to": "try-strong",
+      "kind": "trigger",
+      "label": "attempt"
+    }
+  ],
+  "budget": {
+    "maxWorkers": 4
+  }
+}

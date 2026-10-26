@@ -193,15 +193,28 @@ export function createTerminalAgents(agents: AgentsBase, terminal: AgentTerminal
     // A worktree checkout's agent folders may exist only in the base checkout.
     const baseCwd = cwd === agents.root ? undefined : agents.root
     const env = await hooks.envForPty(spawn.terminalId, { ...spawn.env }, config, cwd, baseCwd, launched?.id)
+    if (spawn.launch?.kind === AGENT_LAUNCH.start && launched?.id === 'opencode') {
+      const model = (spawn.launch.params as { model?: unknown })?.model
+      if (typeof model === 'string' && model.trim()) {
+        let configObj: Record<string, unknown> = {}
+        if (typeof env.OPENCODE_CONFIG_CONTENT === 'string' && env.OPENCODE_CONFIG_CONTENT.trim()) {
+          try {
+            const parsed = JSON.parse(env.OPENCODE_CONFIG_CONTENT)
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) configObj = parsed as Record<string, unknown>
+          } catch { /* ignore invalid existing JSON */ }
+        }
+        env.OPENCODE_CONFIG_CONTENT = JSON.stringify({ ...configObj, model })
+      }
+    }
     await hooks.prepareWorkspace(cwd, config, baseCwd, launched?.id)
     syncPromptContext(spawn.terminalId)
     return env
   }))
 
   offs.push(terminal.registerLaunchIntent(AGENT_LAUNCH.start, (params) => {
-    const { agentId, prompt } = (params ?? {}) as { agentId?: unknown; prompt?: unknown }
-    if (!isAgentId(agentId) || (prompt !== undefined && typeof prompt !== 'string')) throw new Error('Invalid agent launch')
-    return { command: agentLaunchCommand({ agentId, prompt }) }
+    const { agentId, prompt, model, effort } = (params ?? {}) as { agentId?: unknown; prompt?: unknown; model?: unknown; effort?: unknown }
+    if (!isAgentId(agentId) || (prompt !== undefined && typeof prompt !== 'string') || (model !== undefined && typeof model !== 'string') || (effort !== undefined && typeof effort !== 'string')) throw new Error('Invalid agent launch')
+    return { command: agentLaunchCommand({ agentId, ...(prompt !== undefined ? { prompt } : {}), ...(model !== undefined ? { model } : {}), ...(effort !== undefined ? { effort } : {}) }) }
   }))
 
   // A restored terminal panel types its stamped session's resume command,

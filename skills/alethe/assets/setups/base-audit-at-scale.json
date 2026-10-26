@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "id": "base-audit-at-scale",
+  "name": "Audit at scale (base)",
+  "source": "alethe",
+  "nodes": [
+    {
+      "id": "lead",
+      "agent": "agy",
+      "model": "gemini-4-argon-medium",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "Orquestrador (Argon)",
+      "orchestrator": true,
+      "prompt": "Orquestrar as fases do playbook usando Gemini 4 Argon.\n\nDefine what counts as an item and the fixed verdict schema.",
+      "worktree": null,
+      "mode": "read-only"
+    },
+    {
+      "id": "extract",
+      "agent": "agy",
+      "model": "gemini-4-argon-medium",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "extractor",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "List every item to check, with a fixed output schema."
+    },
+    {
+      "id": "check",
+      "agent": "opencode",
+      "model": "opencode/glm-5.3-flash-free",
+      "effort": "low",
+      "tier": "cheap",
+      "title": "checker",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "One item per worker in waves of up to 8, repeated until every item is checked."
+    },
+    {
+      "id": "skeptic",
+      "agent": "opencode",
+      "model": "opencode/deepseek-v4.1-flash-free",
+      "effort": "high",
+      "tier": "standard",
+      "title": "skeptic",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "Re-check confirmed findings only; mark what cannot be checked as unverified, never as refuted."
+    },
+    {
+      "id": "report",
+      "agent": "agy",
+      "model": "gemini-4-argon-medium",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "planner",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "Report confirmed, refuted and unverified items separately."
+    }
+  ],
+  "edges": [
+    {
+      "from": "lead",
+      "to": "extract",
+      "kind": "context",
+      "label": "extractor"
+    },
+    {
+      "from": "extract",
+      "to": "check",
+      "kind": "verify",
+      "label": "checker"
+    },
+    {
+      "from": "check",
+      "to": "skeptic",
+      "kind": "context",
+      "label": "skeptic"
+    },
+    {
+      "from": "skeptic",
+      "to": "report",
+      "kind": "context",
+      "label": "planner"
+    }
+  ],
+  "budget": {
+    "maxWorkers": 5
+  }
+}

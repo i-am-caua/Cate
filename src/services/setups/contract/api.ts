@@ -41,6 +41,7 @@ export const setupApi = defineCateApi(
       args: {
         setupId: str.nonEmpty().pos('id').help('Setup id from cate setup list'),
         canvasPanelId: opt(panel('canvas')).flag('canvas', 'id').help('Place agents on this canvas'),
+        task: opt(str.nonEmpty()).flag('task', 'prompt').help('Optional initial task sent only to the orchestrator panel'),
       },
       timeoutMs: 180_000,
       cli: { command: ['setup', 'apply'] },

@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "id": "base-best-of-n",
+  "name": "Best of N (base)",
+  "source": "alethe",
+  "nodes": [
+    {
+      "id": "lead",
+      "agent": "agy",
+      "model": "gemini-4-argon-medium",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "Orquestrador (Argon)",
+      "orchestrator": true,
+      "prompt": "Orquestrar as fases do playbook usando Gemini 4 Argon.\n\nWrite one brief and hand it to 2 or 3 isolated attempts.",
+      "worktree": null,
+      "mode": "read-only"
+    },
+    {
+      "id": "attempts",
+      "agent": "agy",
+      "model": "gemini-4-argon-medium",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "attempt",
+      "orchestrator": false,
+      "mode": "write",
+      "worktree": "best-of-n-attempts",
+      "prompt": "2 or 3 independent attempts; mix Claude and Codex when both are installed."
+    },
+    {
+      "id": "strong-attempt",
+      "agent": "agy",
+      "model": "gemini-4-argon-high",
+      "effort": "high",
+      "tier": "strong",
+      "title": "attempt",
+      "orchestrator": false,
+      "mode": "write",
+      "worktree": null,
+      "prompt": "One attempt that starts from the failure summaries."
+    },
+    {
+      "id": "judge",
+      "agent": "agy",
+      "model": "gemini-4-argon-high",
+      "effort": "high",
+      "tier": "strong",
+      "title": "judge",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "Compare the passing diffs and pick one."
+    }
+  ],
+  "edges": [
+    {
+      "from": "lead",
+      "to": "attempts",
+      "kind": "trigger",
+      "label": "attempt"
+    },
+    {
+      "from": "attempts",
+      "to": "strong-attempt",
+      "kind": "trigger",
+      "label": "attempt"
+    },
+    {
+      "from": "strong-attempt",
+      "to": "judge",
+      "kind": "context",
+      "label": "judge"
+    }
+  ],
+  "budget": {
+    "maxWorkers": 4
+  }
+}

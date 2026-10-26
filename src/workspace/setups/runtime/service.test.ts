@@ -14,6 +14,9 @@ const team: CateSetup = {
       id: 'lead',
       title: 'Lead',
       agentId: 'codex',
+      model: 'gemini-4-argon-medium',
+      effort: 'high',
+      worktree: 'lead-worktree',
       prompt: 'Coordinate the work',
       position: { x: 10, y: 20 },
       size: { width: 640, height: 400 },
@@ -23,6 +26,9 @@ const team: CateSetup = {
       id: 'worker',
       title: 'Worker',
       agentId: 'opencode',
+      model: 'gemini-3.8-flash-low',
+      effort: 'low',
+      worktree: 'feature-work',
       prompt: 'Implement the feature',
       position: { x: 720, y: 20 },
     },
@@ -111,7 +117,7 @@ describe('setup runtime', () => {
     await expect(runtime().save({ ...team, nodes: [], edges: [] })).rejects.toThrow(/setup-empty/)
   })
 
-  it('starts every node at its saved position and draws the edges', async () => {
+  it('starts every node idle at its saved position and draws the edges', async () => {
     const service = runtime()
     await service.save(team)
 
@@ -126,8 +132,10 @@ describe('setup runtime', () => {
     })
     expect(startAgent).toHaveBeenNthCalledWith(1, expect.objectContaining({
       agentId: 'codex',
+      model: 'gemini-4-argon-medium',
+      effort: 'high',
+      newWorktree: 'lead-worktree',
       title: 'Lead',
-      prompt: 'Coordinate the work',
       orchestrator: true,
       at: expect.objectContaining({
         to: 'canvas',
@@ -137,11 +145,26 @@ describe('setup runtime', () => {
     }))
     expect(startAgent).toHaveBeenNthCalledWith(2, expect.objectContaining({
       agentId: 'opencode',
+      model: 'gemini-3.8-flash-low',
+      effort: 'low',
+      newWorktree: 'feature-work',
       at: expect.objectContaining({
         rect: { origin: { x: 720, y: 20 }, size: { width: 640, height: 400 } },
       }),
     }))
+    expect(startAgent.mock.calls[0]?.[0]).not.toHaveProperty('prompt')
+    expect(startAgent.mock.calls[1]?.[0]).not.toHaveProperty('prompt')
     expect(addRelation).toHaveBeenCalledWith('panel-1', 'panel-2', 'trigger', 'Implementation')
+  })
+
+  it('sends the optional initial prompt only to the orchestrator', async () => {
+    const service = runtime()
+    await service.save(team)
+
+    await service.apply({ id: 'team-flow', orchestratorPrompt: '  Refactor auth  ' })
+
+    expect(startAgent.mock.calls[0]?.[0]).toMatchObject({ prompt: 'Refactor auth' })
+    expect(startAgent.mock.calls[1]?.[0]).not.toHaveProperty('prompt')
   })
 
   it('keeps going when one agent fails and reports the warning', async () => {

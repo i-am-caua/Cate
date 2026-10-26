@@ -10,7 +10,7 @@ export const setupCapability = defineCapability('setup', {
      *  id is the name's slug, made unique instead of overwriting. */
     save: method<{ setup: CateSetup; scope?: SetupScope; id?: string }, SetupEntry>({ mutates: true }),
     /** Starts every node's agent on a canvas and draws the edges. */
-    apply: method<{ id: string; scope?: SetupScope; canvasPanelId?: string }, SetupApplyResult>({
+    apply: method<{ id: string; scope?: SetupScope; canvasPanelId?: string; orchestratorPrompt?: string }, SetupApplyResult>({
       mutates: true,
       timeoutMs: 180_000,
     }),

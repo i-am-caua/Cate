@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "id": "base-direct",
+  "name": "Direct (base)",
+  "source": "alethe",
+  "nodes": [
+    {
+      "id": "lead",
+      "agent": "agy",
+      "model": "gemini-4-argon-medium",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "Orquestrador (Argon)",
+      "orchestrator": true,
+      "prompt": "Orquestrar as fases do playbook usando Gemini 4 Argon.\n\nMake the change and run the checks yourself; no workers.",
+      "worktree": null,
+      "mode": "read-only"
+    },
+    {
+      "id": "consult",
+      "agent": "agy",
+      "model": "gemini-4-argon-high",
+      "effort": "high",
+      "tier": "strong",
+      "title": "advisor",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "Send only the failure summary and the diff; ask for a diagnosis, not a rewrite."
+    }
+  ],
+  "edges": [
+    {
+      "from": "lead",
+      "to": "consult",
+      "kind": "context",
+      "label": "advisor"
+    }
+  ],
+  "budget": {
+    "maxWorkers": 2
+  }
+}

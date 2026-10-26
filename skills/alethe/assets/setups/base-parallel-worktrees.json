@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "id": "base-parallel-worktrees",
+  "name": "Parallel worktrees (base)",
+  "source": "alethe",
+  "nodes": [
+    {
+      "id": "lead",
+      "agent": "agy",
+      "model": "gemini-4-argon-medium",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "Orquestrador (Argon)",
+      "orchestrator": true,
+      "prompt": "Orquestrar as fases do playbook usando Gemini 4 Argon.\n\nAssign disjoint files and fix the interfaces between units before anyone writes.",
+      "worktree": null,
+      "mode": "read-only"
+    },
+    {
+      "id": "build",
+      "agent": "codex",
+      "model": "gpt-6-luna",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "builder",
+      "orchestrator": false,
+      "mode": "write",
+      "worktree": "parallel-worktrees-build",
+      "prompt": "One unit per worker, 2 to 4 workers, each in its own worktree."
+    },
+    {
+      "id": "integrate",
+      "agent": "agy",
+      "model": "gemini-4-argon-medium",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "integrator",
+      "orchestrator": false,
+      "mode": "write",
+      "worktree": null,
+      "prompt": "Combine the diffs and run the full test suite."
+    },
+    {
+      "id": "replan",
+      "agent": "agy",
+      "model": "gemini-4-argon-high",
+      "effort": "high",
+      "tier": "strong",
+      "title": "planner",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "Re-plan only the failing slice."
+    }
+  ],
+  "edges": [
+    {
+      "from": "lead",
+      "to": "build",
+      "kind": "trigger",
+      "label": "builder"
+    },
+    {
+      "from": "build",
+      "to": "integrate",
+      "kind": "trigger",
+      "label": "integrator"
+    },
+    {
+      "from": "integrate",
+      "to": "replan",
+      "kind": "context",
+      "label": "planner"
+    }
+  ],
+  "budget": {
+    "maxWorkers": 4
+  }
+}

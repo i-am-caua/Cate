@@ -12,6 +12,8 @@ import type { UsageLimitsReport, UsagePricing, UsageSummary, UsageSummaryInput }
  *  prompt the agent opens its interactive session. */
 export interface AgentStartRequest {
   prompt?: string
+  model?: string
+  effort?: string
   agentId?: AgentId
   title?: string
   worktreeId?: string

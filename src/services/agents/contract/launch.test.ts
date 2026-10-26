@@ -36,6 +36,44 @@ describe('agentLaunchCommand', () => {
     ])
   })
 
+  it('adds model and effort to agy with and without a prompt', () => {
+    const flags = ['--model', 'gemini-3.8-flash-low', '--effort', 'low']
+    expect(agentLaunchCommand({ agentId: 'agy', model: 'gemini-3.8-flash-low', effort: 'low' }).args).toEqual(flags)
+    expect(agentLaunchCommand({ agentId: 'agy', prompt: 'Fix it', model: 'gemini-3.8-flash-low', effort: 'low' }).args).toEqual([
+      ...flags,
+      '-i',
+      'Complete this coding task:\n\nFix it',
+    ])
+  })
+
+  it('adds model and effort in the Codex CLI format', () => {
+    expect(agentLaunchCommand({ agentId: 'codex', model: 'gpt-6-luna', effort: 'medium' }).args).toEqual([
+      '--model', 'gpt-6-luna', '-c', 'model_reasoning_effort="medium"',
+    ])
+  })
+
+  it('adds model and effort flags to Claude Code', () => {
+    expect(agentLaunchCommand({ agentId: 'claude-code', model: 'claude-sonnet', effort: 'high' }).args).toEqual([
+      '--model', 'claude-sonnet', '--effort', 'high',
+    ])
+  })
+
+  it('starts OpenCode in standalone mode when a model is pinned', () => {
+    expect(agentLaunchCommand({ agentId: 'opencode', model: 'provider/model' }).args).toEqual(['--standalone'])
+    expect(agentLaunchCommand({ agentId: 'opencode', prompt: 'Fix it', model: 'provider/model' }).args).toEqual([
+      '--standalone', '--prompt', 'Complete this coding task:\n\nFix it',
+    ])
+  })
+
+  it.each([
+    ['model', '--bad'],
+    ['model', ' has spaces '],
+    ['effort', '--bad'],
+    ['effort', 'has spaces'],
+  ] as const)('rejects unsafe %s value %j', (key, value) => {
+    expect(() => agentLaunchCommand({ agentId: 'codex', [key]: value })).toThrow(`Invalid ${key}`)
+  })
+
   it('rejects blank prompts', () => {
     expect(() => agentLaunchCommand({ agentId: 'codex', prompt: '   ' })).toThrow('A prompt is required')
   })

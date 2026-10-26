@@ -14,8 +14,8 @@ const setup = {
   name: 'Team Flow',
   source: 'manual',
   nodes: [
-    { id: 'lead', agent: 'codex', title: 'Lead', orchestrator: true, prompt: 'Coordinate the work', worktree: null, mode: 'write' },
-    { id: 'worker', agent: 'opencode', title: 'Worker', orchestrator: false, prompt: 'Implement the feature', worktree: 'feature-work', mode: 'read-only' },
+    { id: 'lead', agent: 'codex', title: 'Lead', orchestrator: true, model: 'gemini-4-argon-medium', effort: 'high', tier: 'strong', prompt: 'Coordinate the work', worktree: null, mode: 'write' },
+    { id: 'worker', agent: 'opencode', title: 'Worker', orchestrator: false, model: 'gemini-3.8-flash-low', effort: 'low', prompt: 'Implement the feature', worktree: 'feature-work', mode: 'read-only' },
   ],
   edges: [{ from: 'lead', to: 'worker', kind: 'trigger', label: 'Implementation' }],
   budget: { maxWorkers: 1 },
@@ -106,7 +106,7 @@ describe('setups runtime', () => {
     await expect(service.apiHandlers()['import']({ file: input }, context)).rejects.toThrow(/setup-invalid: edges\[0\]\.to/)
   })
 
-  it('starts nodes, marks orchestrators and adds their relations', async () => {
+  it('starts nodes idle, forwards model settings, marks orchestrators and adds relations', async () => {
     const { service, documentState, start } = runtime()
     const setupDir = path.join(root, '.cate', 'setups')
     await fs.mkdir(setupDir, { recursive: true })
@@ -114,10 +114,34 @@ describe('setups runtime', () => {
     const result = await service.apiHandlers().apply({ setupId: setup.id, canvasPanelId: 'canvas-panel' }, context)
     expect(result).toMatchObject({ ok: true, setupId: setup.id, panels: { lead: 'panel-1', worker: 'panel-2' } })
     expect((result as { relations: string[] }).relations).toHaveLength(1)
-    expect(start).toHaveBeenNthCalledWith(1, undefined, expect.objectContaining({ agentId: 'codex', placement: { near: 'canvas-panel' } }))
-    expect(start).toHaveBeenNthCalledWith(2, undefined, expect.objectContaining({ agentId: 'opencode', newWorktree: 'feature-work' }))
+    expect(start).toHaveBeenNthCalledWith(1, undefined, expect.objectContaining({
+      agentId: 'codex',
+      model: 'gemini-4-argon-medium',
+      effort: 'high',
+      placement: { near: 'canvas-panel' },
+    }))
+    expect(start).toHaveBeenNthCalledWith(2, undefined, expect.objectContaining({
+      agentId: 'opencode',
+      model: 'gemini-3.8-flash-low',
+      effort: 'low',
+      newWorktree: 'feature-work',
+    }))
+    expect(start.mock.calls[0]?.[1]).not.toHaveProperty('prompt')
+    expect(start.mock.calls[1]?.[1]).not.toHaveProperty('prompt')
     expect(documentState().panels['panel-1'].fields.orchestrator).toBe(true)
     expect(Object.values(documentState().relations)).toMatchObject([{ fromPanelId: 'panel-1', toPanelId: 'panel-2', kind: 'trigger', label: 'Implementation' }])
+  })
+
+  it('sends an optional task only to the orchestrator', async () => {
+    const { service, start } = runtime()
+    const setupDir = path.join(root, '.cate', 'setups')
+    await fs.mkdir(setupDir, { recursive: true })
+    await fs.writeFile(path.join(setupDir, setup.id + '.json'), JSON.stringify(setup))
+
+    await service.apiHandlers().apply({ setupId: setup.id, task: 'Refactor auth' }, context)
+
+    expect(start.mock.calls[0]?.[1]).toMatchObject({ prompt: 'Refactor auth' })
+    expect(start.mock.calls[1]?.[1]).not.toHaveProperty('prompt')
   })
 })
 

@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "id": "base-complete",
+  "name": "Complete (base)",
+  "source": "alethe",
+  "nodes": [
+    {
+      "id": "lead",
+      "agent": "agy",
+      "model": "gemini-4-argon-medium",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "Orquestrador (Argon)",
+      "orchestrator": true,
+      "prompt": "Orquestrar as fases do playbook usando Gemini 4 Argon.\n\nRead the task; unless it is narrow, split it into bounded units and tag each one with a kind and an effort class.",
+      "worktree": null,
+      "mode": "read-only"
+    },
+    {
+      "id": "quick",
+      "agent": "codex",
+      "model": "gpt-6-luna",
+      "effort": "high",
+      "tier": "strong",
+      "title": "do it yourself",
+      "orchestrator": false,
+      "mode": "write",
+      "worktree": null,
+      "prompt": "A narrow task never leaves your session; make the change and run the checks."
+    },
+    {
+      "id": "read",
+      "agent": "agy",
+      "model": "gemini-3.8-flash-low",
+      "effort": "low",
+      "tier": "cheap",
+      "title": "scout",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "One question per scout."
+    },
+    {
+      "id": "build",
+      "agent": "codex",
+      "model": "gpt-6-luna",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "builder",
+      "orchestrator": false,
+      "mode": "write",
+      "worktree": null,
+      "prompt": "Implement one unit."
+    },
+    {
+      "id": "review",
+      "agent": "codex",
+      "model": "gpt-6-luna",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "reviewer",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "Review the finished diff against the plan and the repository rules."
+    },
+    {
+      "id": "fix",
+      "agent": "codex",
+      "model": "gpt-6-luna",
+      "effort": "high",
+      "tier": "strong",
+      "title": "fixer",
+      "orchestrator": false,
+      "mode": "write",
+      "worktree": null,
+      "prompt": "Fix from the failure excerpt and the review notes."
+    }
+  ],
+  "edges": [
+    {
+      "from": "lead",
+      "to": "quick",
+      "kind": "trigger",
+      "label": "do it yourself"
+    },
+    {
+      "from": "quick",
+      "to": "read",
+      "kind": "context",
+      "label": "scout"
+    },
+    {
+      "from": "read",
+      "to": "build",
+      "kind": "trigger",
+      "label": "builder"
+    },
+    {
+      "from": "build",
+      "to": "review",
+      "kind": "verify",
+      "label": "reviewer"
+    },
+    {
+      "from": "review",
+      "to": "fix",
+      "kind": "trigger",
+      "label": "fixer"
+    }
+  ],
+  "budget": {
+    "maxWorkers": 6
+  }
+}

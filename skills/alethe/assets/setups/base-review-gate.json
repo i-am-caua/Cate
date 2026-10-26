@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "id": "base-review-gate",
+  "name": "Review gate (base)",
+  "source": "alethe",
+  "nodes": [
+    {
+      "id": "lead",
+      "agent": "agy",
+      "model": "gemini-4-argon-medium",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "Orquestrador (Argon)",
+      "orchestrator": true,
+      "prompt": "Orquestrar as fases do playbook usando Gemini 4 Argon.\n\nHand the finished diff and the repository rules to triage.",
+      "worktree": null,
+      "mode": "read-only"
+    },
+    {
+      "id": "triage",
+      "agent": "opencode",
+      "model": "opencode/glm-5.3-flash-free",
+      "effort": "low",
+      "tier": "cheap",
+      "title": "triage",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "Skip trivial diffs; otherwise list the paths that need review."
+    },
+    {
+      "id": "conventions",
+      "agent": "opencode",
+      "model": "opencode/deepseek-v4.1-flash-free",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "reviewer",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "Check the diff against the repository's rules and conventions; give each reviewer its own focus, such as naming and structure, or tests and error handling."
+    },
+    {
+      "id": "bugs",
+      "agent": "agy",
+      "model": "gemini-4-argon-high",
+      "effort": "high",
+      "tier": "strong",
+      "title": "bug-hunter",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "Look only for real bugs in the diff."
+    },
+    {
+      "id": "validate",
+      "agent": "agy",
+      "model": "gemini-4-argon-high",
+      "effort": "high",
+      "tier": "strong",
+      "title": "validator",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "Confirm or reject each finding against the code; a finding two providers reported on their own needs no second check."
+    },
+    {
+      "id": "fix",
+      "agent": "codex",
+      "model": "gpt-6-luna",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "fixer",
+      "orchestrator": false,
+      "mode": "write",
+      "worktree": null,
+      "prompt": "Fix the confirmed findings only."
+    }
+  ],
+  "edges": [
+    {
+      "from": "lead",
+      "to": "triage",
+      "kind": "context",
+      "label": "triage"
+    },
+    {
+      "from": "triage",
+      "to": "conventions",
+      "kind": "verify",
+      "label": "reviewer"
+    },
+    {
+      "from": "conventions",
+      "to": "bugs",
+      "kind": "context",
+      "label": "bug-hunter"
+    },
+    {
+      "from": "bugs",
+      "to": "validate",
+      "kind": "context",
+      "label": "validator"
+    },
+    {
+      "from": "validate",
+      "to": "fix",
+      "kind": "trigger",
+      "label": "fixer"
+    }
+  ],
+  "budget": {
+    "maxWorkers": 6
+  }
+}

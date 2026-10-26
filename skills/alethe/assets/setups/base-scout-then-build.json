@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "id": "base-scout-then-build",
+  "name": "Scout, then build (base)",
+  "source": "alethe",
+  "nodes": [
+    {
+      "id": "lead",
+      "agent": "agy",
+      "model": "gemini-4-argon-medium",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "Orquestrador (Argon)",
+      "orchestrator": true,
+      "prompt": "Orquestrar as fases do playbook usando Gemini 4 Argon.\n\nName the areas to map and send one scout per area.",
+      "worktree": null,
+      "mode": "read-only"
+    },
+    {
+      "id": "scout",
+      "agent": "agy",
+      "model": "gemini-3.8-flash-low",
+      "effort": "low",
+      "tier": "cheap",
+      "title": "scout",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "One area per scout; keep each slice well under 100K tokens."
+    },
+    {
+      "id": "settle",
+      "agent": "opencode",
+      "model": "opencode/deepseek-v4.1-flash-free",
+      "effort": "high",
+      "tier": "standard",
+      "title": "checker",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "Settle only the contradiction, from the cited lines."
+    },
+    {
+      "id": "plan",
+      "agent": "agy",
+      "model": "gemini-4-argon-high",
+      "effort": "high",
+      "tier": "strong",
+      "title": "planner",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "Turn the summaries into one concrete change plan."
+    },
+    {
+      "id": "build",
+      "agent": "codex",
+      "model": "gpt-6-luna",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "builder",
+      "orchestrator": false,
+      "mode": "write",
+      "worktree": null,
+      "prompt": "Implement the plan."
+    },
+    {
+      "id": "fix",
+      "agent": "codex",
+      "model": "gpt-6-luna",
+      "effort": "high",
+      "tier": "strong",
+      "title": "fixer",
+      "orchestrator": false,
+      "mode": "write",
+      "worktree": null,
+      "prompt": "Fix from the failure excerpt and the diff."
+    }
+  ],
+  "edges": [
+    {
+      "from": "lead",
+      "to": "scout",
+      "kind": "context",
+      "label": "scout"
+    },
+    {
+      "from": "scout",
+      "to": "settle",
+      "kind": "verify",
+      "label": "checker"
+    },
+    {
+      "from": "settle",
+      "to": "plan",
+      "kind": "context",
+      "label": "planner"
+    },
+    {
+      "from": "plan",
+      "to": "build",
+      "kind": "trigger",
+      "label": "builder"
+    },
+    {
+      "from": "build",
+      "to": "fix",
+      "kind": "trigger",
+      "label": "fixer"
+    }
+  ],
+  "budget": {
+    "maxWorkers": 6
+  }
+}

@@ -65,6 +65,7 @@ import { CATE_API } from '@panels/api'
 import {
   createAgentsRuntime,
   withoutInheritedHookIdentity,
+  type AgentStartArgs,
   type AgentStartPorts,
   type AgentsDocument,
 } from '@services/agents/runtime'
@@ -326,19 +327,24 @@ export function composeWorkspace(deps: WorkspaceDeps) {
 
   // Setups start agents and draw their relations through the same ports the
   // agents service uses, so they land on the requested canvas.
+  const bundledSetupsDir = path.join(layout.skills, 'alethe', 'assets', 'setups')
   const setups = createSetupRuntime({
     root,
     ...(deps.home ? { home: deps.home } : {}),
+    bundledSetupsDir,
     trust,
     prepareCateDir,
     log: log.child('setups'),
     startAgent: (args) => agentsRuntime.start(undefined, {
       ...(args.agentId ? { agentId: args.agentId as AgentId } : {}),
+      ...(args.model ? { model: args.model } : {}),
+      ...(args.effort ? { effort: args.effort } : {}),
+      ...(args.newWorktree ? { newWorktree: args.newWorktree } : {}),
       title: args.title,
       ...(args.prompt ? { prompt: args.prompt } : {}),
       placement: { at: args.at },
       ...(args.orchestrator ? { orchestrator: true } : {}),
-    }),
+    } as AgentStartArgs),
     addRelation: (fromPanelId, toPanelId, kind, label) =>
       addPanelRelation(document, (type) => relationRole(type), fromPanelId, toPanelId, kind, label),
     canvasForPanel: (canvasPanelId) => document.get().panels[canvasPanelId]?.canvasId ?? null,

@@ -202,4 +202,84 @@ describe('SetupsPopover', () => {
     expect(((start.mock.calls as any)[0]?.[0])?.prompt).toContain('.cate/setups/')
     expect(onClose).toHaveBeenCalled()
   })
+
+  it('opens the diagram preview with SVG nodes, model/effort badges, and edge labels, then returns to the list', async () => {
+    const detailedSetup: CateSetup = {
+      version: 1,
+      name: 'Release crew',
+      description: 'Orchestrated release verification team',
+      source: 'alethe',
+      nodes: [
+        {
+          id: 'lead',
+          title: 'Maestro',
+          agentId: 'agy',
+          model: 'gemini-4-argon-medium',
+          effort: 'medium',
+          prompt: 'Coordinate the release tasks.',
+          position: { x: 0, y: 0 },
+          orchestrator: true,
+        } as CateSetup['nodes'][number],
+        {
+          id: 'verifier',
+          title: 'Verifier',
+          agentId: 'agy',
+          model: 'gemini-3.8-flash-low',
+          effort: 'low',
+          prompt: 'Run unit and integration checks.',
+          position: { x: 720, y: 0 },
+        } as CateSetup['nodes'][number],
+      ],
+      edges: [
+        { from: 'lead', to: 'verifier', kind: 'verify', label: 'Smoke suite' },
+      ],
+    }
+    setupList.mockResolvedValue([entry({ setup: detailedSetup })])
+
+    await render()
+
+    const previewBtn = host.querySelector<HTMLButtonElement>('button[aria-label="Preview Release crew"]')!
+    expect(previewBtn).toBeTruthy()
+    await act(async () => previewBtn.click())
+
+    const svg = host.querySelector<SVGSVGElement>('svg[data-testid="setup-diagram-svg"]')
+    expect(svg).toBeTruthy()
+    expect(svg?.textContent).toContain('Maestro')
+    expect(svg?.textContent).toContain('Verifier')
+    expect(svg?.textContent).toContain('gemini-4-argon-medium · medium')
+    expect(svg?.textContent).toContain('gemini-3.8-flash-low · low')
+    expect(svg?.textContent).toContain('verify · Smoke suite')
+    expect(host.textContent).toContain('Coordinate the release tasks.')
+
+    const backBtn = host.querySelector<HTMLButtonElement>('button[aria-label="Back to setups"]')!
+    await act(async () => backBtn.click())
+
+    expect(host.querySelector('svg[data-testid="setup-diagram-svg"]')).toBeNull()
+    expect(host.querySelector('button[aria-label="Preview Release crew"]')).toBeTruthy()
+  })
+
+  it('passes orchestratorPrompt when applying a setup with an orchestrator task from preview', async () => {
+    await render()
+
+    await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="Preview Release crew"]')!.click())
+
+    const taskInput = host.querySelector<HTMLInputElement>('input[aria-label="Orchestrator task"]')!
+    expect(taskInput).toBeTruthy()
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(taskInput, '  Ship v2.4 and verify changelog  ')
+      taskInput.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+
+    const applyBtn = host.querySelector<HTMLButtonElement>('button[aria-label="Apply Release crew"]')!
+    await act(async () => applyBtn.click())
+    await act(async () => { await Promise.resolve() })
+
+    expect(setupApply).toHaveBeenCalledWith({
+      id: 'release-crew',
+      scope: 'local',
+      canvasPanelId: 'canvas-panel',
+      orchestratorPrompt: 'Ship v2.4 and verify changelog',
+    })
+    expect(onClose).toHaveBeenCalled()
+  })
 })

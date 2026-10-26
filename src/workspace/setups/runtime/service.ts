@@ -24,6 +24,9 @@ import {
 
 export interface SetupStartArgs {
   agentId?: string
+  model?: string
+  effort?: string
+  newWorktree?: string
   title: string
   prompt?: string
   at: PlaceTarget
@@ -45,6 +48,8 @@ export interface SetupRuntimeDeps extends SetupRuntimePorts {
   root: string
   /** The user's home; defaults to `os.homedir()`. */
   home?: string
+  /** Optional directory of default setups bundled with the runtime. */
+  bundledSetupsDir?: string
   trust: { requireTrusted(): void }
   /** Best effort: create `.cate/.gitignore` before writing into `.cate/`. */
   prepareCateDir?: (cateDir: string) => Promise<void>
@@ -108,12 +113,39 @@ export function createSetupRuntime(deps: SetupRuntimeDeps) {
     return entries.filter((entry): entry is SetupEntry => entry !== null)
   }
 
+  let seededBundled: Promise<void> | null = null
+  async function ensureBundledSetups(): Promise<void> {
+    if (!deps.bundledSetupsDir) return
+    seededBundled ??= (async () => {
+      let names: string[]
+      try {
+        names = await fs.readdir(deps.bundledSetupsDir!)
+      } catch {
+        return
+      }
+      await fs.mkdir(globalDir, { recursive: true }).catch(() => {})
+      for (const name of names) {
+        if (!name.endsWith('.json') || !SAFE_ID.test(name.slice(0, -5))) continue
+        const target = path.join(globalDir, name)
+        try {
+          const content = await fs.readFile(path.join(deps.bundledSetupsDir!, name), 'utf8')
+          await fs.writeFile(target, content, { encoding: 'utf8', flag: 'wx' })
+        } catch {
+          // Already exists or unreadable; keep user's copy.
+        }
+      }
+    })()
+    await seededBundled
+  }
+
   async function list(): Promise<SetupEntry[]> {
+    await ensureBundledSetups()
     const [local, global] = await Promise.all([listDir('local'), listDir('global')])
     return [...local, ...global]
   }
 
   async function find(id: string, scope?: SetupScope): Promise<SetupEntry> {
+    await ensureBundledSetups()
     const safe = checkedId(id)
     const scopes: SetupScope[] = scope ? [scope] : ['local', 'global']
     for (const candidate of scopes) {
@@ -161,7 +193,7 @@ export function createSetupRuntime(deps: SetupRuntimeDeps) {
     return { id, scope, path: file, setup }
   }
 
-  async function apply(params: { id: string; scope?: SetupScope; canvasPanelId?: string }): Promise<SetupApplyResult> {
+  async function apply(params: { id: string; scope?: SetupScope; canvasPanelId?: string; orchestratorPrompt?: string }): Promise<SetupApplyResult> {
     deps.trust.requireTrusted()
     const entry = await find(params.id, params.scope)
     const canvasPanelId = params.canvasPanelId ?? deps.defaultCanvasPanel()
@@ -180,13 +212,28 @@ export function createSetupRuntime(deps: SetupRuntimeDeps) {
         rect: { origin: node.position, size: node.size ?? DEFAULT_SETUP_NODE_SIZE },
       }
       try {
-        const result = await deps.startAgent({
+        const initialPrompt = node.orchestrator && params.orchestratorPrompt?.trim()
+          ? params.orchestratorPrompt.trim()
+          : undefined
+        const baseStartArgs = {
           ...(node.agentId ? { agentId: node.agentId } : {}),
+          ...(node.model ? { model: node.model } : {}),
+          ...(node.effort ? { effort: node.effort } : {}),
           title: node.title,
-          ...(node.prompt ? { prompt: node.prompt } : {}),
+          ...(initialPrompt ? { prompt: initialPrompt } : {}),
           at,
           ...(node.orchestrator ? { orchestrator: true } : {}),
-        })
+        }
+        let result: { panelId: string; warning?: string }
+        if (node.worktree) {
+          try {
+            result = await deps.startAgent({ ...baseStartArgs, newWorktree: node.worktree })
+          } catch {
+            result = await deps.startAgent(baseStartArgs)
+          }
+        } else {
+          result = await deps.startAgent(baseStartArgs)
+        }
         panelIds[node.id] = result.panelId
         if (result.warning) warnings.push(`${node.title}: ${result.warning}`)
       } catch (error) {
@@ -227,10 +274,11 @@ export function setupCapabilityImpl(service: SetupRuntime): CapabilityImpl<typeo
   return {
     list: () => service.list(),
     save: ({ setup, scope, id }) => service.save(setup, { ...(scope ? { scope } : {}), ...(id ? { id } : {}) }),
-    apply: ({ id, scope, canvasPanelId }) => service.apply({
+    apply: ({ id, scope, canvasPanelId, orchestratorPrompt }) => service.apply({
       id,
       ...(scope ? { scope } : {}),
       ...(canvasPanelId ? { canvasPanelId } : {}),
+      ...(orchestratorPrompt ? { orchestratorPrompt } : {}),
     }),
   }
 }

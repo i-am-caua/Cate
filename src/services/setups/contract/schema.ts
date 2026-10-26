@@ -12,6 +12,9 @@ export interface SetupNode {
   agent: SetupAgentId
   title: string
   orchestrator: boolean
+  model?: string
+  effort?: string
+  tier?: string
   prompt: string
   worktree: string | null
   mode: SetupMode

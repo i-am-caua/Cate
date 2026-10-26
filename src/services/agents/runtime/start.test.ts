@@ -105,6 +105,13 @@ describe('agent start', () => {
     }))
   })
 
+  it('forwards the selected model and effort while allowing an interactive start', async () => {
+    await starter().start(undefined, { agentId: 'codex', model: 'gpt-6-luna', effort: 'medium' })
+    expect(ports.terminals.create).toHaveBeenCalledWith(expect.objectContaining({
+      launch: { kind: 'agents.start', params: { agentId: 'codex', model: 'gpt-6-luna', effort: 'medium' } },
+    }))
+  })
+
   it('marks a title the caller chose, so the agent never retitles the panel', async () => {
     await starter().start('supervisor', { prompt: 'Fix the login', title: '  Alpha ' })
     expect(ports.terminals.create).toHaveBeenCalledWith(expect.objectContaining({ title: 'Alpha', titleChosen: true }))
@@ -180,7 +187,7 @@ describe('agent start', () => {
 
   it('lists every agent CLI with whether it can start here', async () => {
     const types = await starter().types()
-    expect(types.map((type) => type.agentId)).toEqual(['claude-code', 'codex', 'cursor', 'grok', 'opencode', 'kiro'])
+    expect(types.map((type) => type.agentId)).toEqual(['claude-code', 'codex', 'cursor', 'grok', 'opencode', 'kiro', 'agy'])
     expect(types.find((type) => type.agentId === 'codex')).toEqual({ agentId: 'codex', displayName: 'Codex', ready: true })
     expect(types.find((type) => type.agentId === 'kiro')).toMatchObject({ ready: false })
   })

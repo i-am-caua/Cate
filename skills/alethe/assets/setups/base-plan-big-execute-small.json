@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "id": "base-plan-big-execute-small",
+  "name": "Plan big, execute small (base)",
+  "source": "alethe",
+  "nodes": [
+    {
+      "id": "lead",
+      "agent": "agy",
+      "model": "gemini-4-argon-medium",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "Orquestrador (Argon)",
+      "orchestrator": true,
+      "prompt": "Orquestrar as fases do playbook usando Gemini 4 Argon.\n\nSplit the question into independent units and write one plain brief per unit that says what to return. Do not read the raw material yourself.",
+      "worktree": null,
+      "mode": "read-only"
+    },
+    {
+      "id": "investigate",
+      "agent": "agy",
+      "model": "gemini-3.8-flash-low",
+      "effort": "low",
+      "tier": "cheap",
+      "title": "worker",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "One unit per worker, up to 8; never split one unit across several briefs."
+    },
+    {
+      "id": "follow-up",
+      "agent": "agy",
+      "model": "gemini-3.8-flash-low",
+      "effort": "low",
+      "tier": "cheap",
+      "title": "worker",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "Resume that worker's session with one focused question. After an infrastructure error, give the same brief to a fresh worker instead."
+    },
+    {
+      "id": "synthesize",
+      "agent": "agy",
+      "model": "gemini-4-argon-high",
+      "effort": "high",
+      "tier": "strong",
+      "title": "planner",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "Wait for every report, then answer from the reports alone."
+    }
+  ],
+  "edges": [
+    {
+      "from": "lead",
+      "to": "investigate",
+      "kind": "context",
+      "label": "worker"
+    },
+    {
+      "from": "investigate",
+      "to": "follow-up",
+      "kind": "context",
+      "label": "worker"
+    },
+    {
+      "from": "follow-up",
+      "to": "synthesize",
+      "kind": "context",
+      "label": "planner"
+    }
+  ],
+  "budget": {
+    "maxWorkers": 4
+  }
+}

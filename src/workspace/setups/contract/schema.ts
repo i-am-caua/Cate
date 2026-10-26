@@ -21,7 +21,17 @@ export interface SetupNode {
   title: string
   /** An agent registry id (`codex`, `opencode`, ...); absent lets the runtime pick. */
   agentId?: string
-  /** The agent's first prompt. */
+  /** Model for this node's agent session (e.g. `gemini-3.8-flash-low`, `gemini-4-argon-medium`). */
+  model?: string
+  /** Reasoning effort for this node's agent session (`low`, `medium`, `high`, ...). */
+  effort?: string
+  /** Tier hint (`cheap`, `standard`, `strong`). */
+  tier?: string
+  /** Execution mode hint (`read-only` or `write`). */
+  mode?: 'read-only' | 'write'
+  /** Optional worktree name for write nodes. */
+  worktree?: string | null
+  /** Role description / reference prompt (not auto-executed on setup launch). */
   prompt?: string
   /** Canvas-space top-left of the node. */
   position: Point
@@ -67,6 +77,8 @@ export interface SetupApplyResult {
 
 export interface SetupCanvasAgent {
   agentId?: string
+  model?: string
+  effort?: string
   orchestrator?: boolean
 }
 
@@ -144,6 +156,49 @@ function parsePoint(raw: Record<string, unknown>, index: number): Point {
   return { x: column * (DEFAULT_SETUP_NODE_SIZE.width + 80), y: row * (DEFAULT_SETUP_NODE_SIZE.height + 80) }
 }
 
+function hasExplicitPoint(raw: Record<string, unknown>): boolean {
+  const position = objectOf(raw.position) ?? objectOf(raw.at)
+  const x = numberOf(position?.x) ?? numberOf(raw.x)
+  const y = numberOf(position?.y) ?? numberOf(raw.y)
+  return x !== undefined && y !== undefined
+}
+
+/** Assigns omitted positions to stable left-to-right layers from the setup DAG. */
+function topologicalPositions(nodes: readonly SetupNode[], edges: readonly SetupEdge[]): Map<string, Point> {
+  const depth = new Map(nodes.map((node) => [node.id, 0]))
+  const incoming = new Map(nodes.map((node) => [node.id, 0]))
+  const outgoing = new Map(nodes.map((node) => [node.id, [] as string[]]))
+  for (const edge of edges) {
+    outgoing.get(edge.from)?.push(edge.to)
+    incoming.set(edge.to, (incoming.get(edge.to) ?? 0) + 1)
+  }
+
+  const ready = nodes.filter((node) => incoming.get(node.id) === 0).map((node) => node.id)
+  let cursor = 0
+  while (cursor < ready.length) {
+    const id = ready[cursor++]
+    for (const child of outgoing.get(id) ?? []) {
+      depth.set(child, Math.max(depth.get(child) ?? 0, (depth.get(id) ?? 0) + 1))
+      const remaining = (incoming.get(child) ?? 0) - 1
+      incoming.set(child, remaining)
+      if (remaining === 0) ready.push(child)
+    }
+  }
+
+  const rowByDepth = new Map<number, number>()
+  const positions = new Map<string, Point>()
+  for (const node of nodes) {
+    const column = depth.get(node.id) ?? 0
+    const row = rowByDepth.get(column) ?? 0
+    rowByDepth.set(column, row + 1)
+    positions.set(node.id, {
+      x: column * (DEFAULT_SETUP_NODE_SIZE.width + 80),
+      y: row * (DEFAULT_SETUP_NODE_SIZE.height + 80),
+    })
+  }
+  return positions
+}
+
 function parseSize(raw: Record<string, unknown>): Size | undefined {
   const size = objectOf(raw.size) ?? objectOf(raw.rect)
   const width = numberOf(size?.width) ?? numberOf(raw.width)
@@ -163,6 +218,12 @@ function parseNode(rawValue: unknown, index: number, key: string | undefined, us
   used.add(unique)
   const title = stringOf(raw.title) ?? stringOf(raw.name) ?? stringOf(raw.label) ?? humanizeId(unique)
   const agentId = stringOf(raw.agentId) ?? stringOf(raw.agent) ?? stringOf(raw.cli) ?? stringOf(raw.tool)
+  const model = stringOf(raw.model)
+  const effort = stringOf(raw.effort)
+  const tier = stringOf(raw.tier)
+  const modeRaw = stringOf(raw.mode)
+  const mode = modeRaw === 'read-only' || modeRaw === 'write' ? modeRaw : undefined
+  const worktree = raw.worktree === null ? null : stringOf(raw.worktree)
   const prompt = stringOf(raw.prompt) ?? stringOf(raw.instructions) ?? stringOf(raw.task)
   const orchestrator = boolOf(raw.orchestrator) ?? boolOf(raw.maestro) ?? undefined
   const size = parseSize(raw)
@@ -170,6 +231,11 @@ function parseNode(rawValue: unknown, index: number, key: string | undefined, us
     id: unique,
     title,
     ...(agentId ? { agentId } : {}),
+    ...(model ? { model } : {}),
+    ...(effort ? { effort } : {}),
+    ...(tier ? { tier } : {}),
+    ...(mode ? { mode } : {}),
+    ...(worktree !== undefined ? { worktree } : {}),
     ...(prompt ? { prompt } : {}),
     position: parsePoint(raw, index),
     ...(size ? { size } : {}),
@@ -211,9 +277,10 @@ export function parseSetup(value: unknown, options: { id?: string; source?: Setu
         })
       : []
   const used = new Set<string>()
-  const nodes = nodesList
-    .map((node, index) => parseNode(node, index, undefined, used))
-    .filter((node): node is SetupNode => node !== null)
+  const parsedNodes = nodesList
+    .map((rawNode, index) => ({ rawNode, node: parseNode(rawNode, index, undefined, used) }))
+    .filter((entry): entry is { rawNode: unknown; node: SetupNode } => entry.node !== null)
+  const nodes = parsedNodes.map((entry) => entry.node)
   const nodeIds = new Set(nodes.map((node) => node.id))
   const edgesValue = raw.edges ?? raw.relations ?? raw.links
   const edgesList = Array.isArray(edgesValue) ? edgesValue : []
@@ -227,6 +294,12 @@ export function parseSetup(value: unknown, options: { id?: string; source?: Setu
       seenPairs.add(pair)
       return true
     })
+  const automaticPositions = topologicalPositions(nodes, edges)
+  const positionedNodes = parsedNodes.map(({ rawNode, node }) => {
+    const raw = objectOf(rawNode)
+    if (!raw || hasExplicitPoint(raw)) return node
+    return { ...node, position: automaticPositions.get(node.id) ?? node.position }
+  })
   const name = stringOf(raw.name) ?? stringOf(raw.title) ?? humanizeId(id)
   const description = stringOf(raw.description) ?? stringOf(raw.summary)
   return {
@@ -234,7 +307,7 @@ export function parseSetup(value: unknown, options: { id?: string; source?: Setu
     name,
     ...(description ? { description } : {}),
     source: inferSource(raw, options.source ?? 'manual'),
-    nodes,
+    nodes: positionedNodes,
     edges,
   }
 }
@@ -251,6 +324,11 @@ export function setupToJson(setup: CateSetup): Record<string, unknown> {
       id: node.id,
       title: node.title,
       ...(node.agentId ? { agentId: node.agentId } : {}),
+      ...(node.model ? { model: node.model } : {}),
+      ...(node.effort ? { effort: node.effort } : {}),
+      ...(node.tier ? { tier: node.tier } : {}),
+      ...(node.mode ? { mode: node.mode } : {}),
+      ...(node.worktree !== undefined ? { worktree: node.worktree } : {}),
       ...(node.prompt ? { prompt: node.prompt } : {}),
       position: { x: node.position.x, y: node.position.y },
       ...(node.size ? { width: node.size.width, height: node.size.height } : {}),
@@ -289,6 +367,8 @@ export function setupFromCanvas(
         id: panelId,
         title: record.title,
         agentId: agent.agentId,
+        ...(agent.model ? { model: agent.model } : {}),
+        ...(agent.effort ? { effort: agent.effort } : {}),
         position: { x: rect.origin.x + stackIndex * 24, y: rect.origin.y + stackIndex * 24 },
         size: { width: rect.size.width, height: rect.size.height },
         ...(agent.orchestrator ? { orchestrator: true } : {}),

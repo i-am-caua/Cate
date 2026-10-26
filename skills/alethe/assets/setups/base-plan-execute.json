@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "id": "base-plan-execute",
+  "name": "Plan, then execute (base)",
+  "source": "alethe",
+  "nodes": [
+    {
+      "id": "lead",
+      "agent": "agy",
+      "model": "gemini-4-argon-medium",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "Orquestrador (Argon)",
+      "orchestrator": true,
+      "prompt": "Orquestrar as fases do playbook usando Gemini 4 Argon.\n\nWrite numbered steps with file paths, interfaces and the check that proves each step.",
+      "worktree": null,
+      "mode": "read-only"
+    },
+    {
+      "id": "execute",
+      "agent": "agy",
+      "model": "gemini-4-argon-medium",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "executor",
+      "orchestrator": false,
+      "mode": "write",
+      "worktree": null,
+      "prompt": "Follow the plan step by step; stop and report when a step is wrong instead of improvising."
+    },
+    {
+      "id": "replan",
+      "agent": "agy",
+      "model": "gemini-4-argon-high",
+      "effort": "high",
+      "tier": "strong",
+      "title": "planner",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "Re-plan only the failing part, from the failure summary."
+    },
+    {
+      "id": "strong-fix",
+      "agent": "codex",
+      "model": "gpt-6-luna",
+      "effort": "high",
+      "tier": "strong",
+      "title": "fixer",
+      "orchestrator": false,
+      "mode": "write",
+      "worktree": null,
+      "prompt": "Apply the revised steps."
+    }
+  ],
+  "edges": [
+    {
+      "from": "lead",
+      "to": "execute",
+      "kind": "trigger",
+      "label": "executor"
+    },
+    {
+      "from": "execute",
+      "to": "replan",
+      "kind": "context",
+      "label": "planner"
+    },
+    {
+      "from": "replan",
+      "to": "strong-fix",
+      "kind": "trigger",
+      "label": "fixer"
+    }
+  ],
+  "budget": {
+    "maxWorkers": 4
+  }
+}

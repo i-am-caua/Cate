@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "id": "base-advisor-escalation",
+  "name": "Advisor on call (base)",
+  "source": "alethe",
+  "nodes": [
+    {
+      "id": "lead",
+      "agent": "agy",
+      "model": "gemini-4-argon-medium",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "Orquestrador (Argon)",
+      "orchestrator": true,
+      "prompt": "Orquestrar as fases do playbook usando Gemini 4 Argon.\n\nHand the task to one executor and name the decisions it must stop at.",
+      "worktree": null,
+      "mode": "read-only"
+    },
+    {
+      "id": "execute",
+      "agent": "agy",
+      "model": "gemini-4-argon-medium",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "executor",
+      "orchestrator": false,
+      "mode": "write",
+      "worktree": null,
+      "prompt": "Work until done, stuck, or about to make a hard-to-reverse decision; then stop with a status under 1K tokens."
+    },
+    {
+      "id": "advise",
+      "agent": "agy",
+      "model": "gemini-4-argon-high",
+      "effort": "high",
+      "tier": "strong",
+      "title": "advisor",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "Read only the status and the cited files, then answer the decision."
+    },
+    {
+      "id": "resume",
+      "agent": "agy",
+      "model": "gemini-4-argon-medium",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "executor",
+      "orchestrator": false,
+      "mode": "write",
+      "worktree": null,
+      "prompt": "Resume the executor's session with the advice."
+    }
+  ],
+  "edges": [
+    {
+      "from": "lead",
+      "to": "execute",
+      "kind": "trigger",
+      "label": "executor"
+    },
+    {
+      "from": "execute",
+      "to": "advise",
+      "kind": "context",
+      "label": "advisor"
+    },
+    {
+      "from": "advise",
+      "to": "resume",
+      "kind": "trigger",
+      "label": "executor"
+    }
+  ],
+  "budget": {
+    "maxWorkers": 4
+  }
+}

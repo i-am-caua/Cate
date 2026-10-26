@@ -96,7 +96,7 @@ describe('skills runtime', () => {
   it('lists the bundled skills as a source and installs them from the runtime dir', async () => {
     const index = await service.index()
     const bundled = index.filter((e) => e.provenance === 'bundled')
-    expect(bundled.map((e) => e.id)).toEqual(['cate/cate-cli', 'cate/cate-theme'])
+    expect(bundled.map((e) => e.id)).toEqual(['cate/alethe', 'cate/cate-cli', 'cate/cate-theme'])
     expect(index.filter((e) => e.id === 'cate/cate-cli')).toHaveLength(1)
 
     const theme = bundled.find((e) => e.id === 'cate/cate-theme')!
@@ -110,11 +110,12 @@ describe('skills runtime', () => {
   it('seeds bundled skills into targets whose tool dir exists', async () => {
     await fs.mkdir(path.join(root, '.codex'))
     await service.seedBundled()
+    expect(await read('.codex/skills/alethe/SKILL.md')).toContain('name: alethe')
     expect(await read('.codex/skills/cate-cli/SKILL.md')).toContain('name: cate-cli')
     expect(await read('.codex/skills/cate-theme/SKILL.md')).toContain('name: cate-theme')
     expect(await exists('.claude')).toBe(false)
     const manifest = JSON.parse(await read('.cate/skills.json'))
-    expect(manifest.seeded).toHaveLength(2)
+    expect(manifest.seeded).toHaveLength(3)
 
     await fs.writeFile(path.join(root, '.codex/skills/cate-cli/SKILL.md'), 'edited')
     expect(await service.reinstallBundled('cate-cli')).toEqual({ installedTargets: 1, warnings: [] })
