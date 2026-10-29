@@ -5,7 +5,7 @@ import type { AgentHookEventKind, AgentId } from '../../contract'
 export const NATIVE_HOOK_KINDS: Record<string, AgentHookEventKind | 'stored-edit'> = {
   SessionStart: 'session-start', sessionStart: 'session-start',
   'session.created': 'session-start',
-  UserPromptSubmit: 'turn-start', beforeSubmitPrompt: 'turn-start',
+  UserPromptSubmit: 'turn-start', beforeSubmitPrompt: 'turn-start', PreInvocation: 'turn-start',
   PermissionRequest: 'permission-check', Notification: 'permission-wait',
   'permission.asked': 'permission-wait',
   PreToolUse: 'turn-resume', PostToolUse: 'turn-resume', PostToolUseFailure: 'turn-resume',
@@ -72,9 +72,9 @@ export const HOOK_LIFECYCLE_CASES: Record<AgentId, Record<string, string[]>> = {
     resume: ['SessionStart', 'UserPromptSubmit', 'Stop'],
   },
   agy: {
-    edit: ['sessionStart', 'beforeSubmitPrompt', 'postToolUse', 'stop'],
+    edit: ['SessionStart', 'PreInvocation', 'PostToolUse', 'Stop'],
     interrupt: [],
-    resume: ['sessionStart', 'beforeSubmitPrompt', 'stop'],
+    resume: ['SessionStart', 'PreInvocation', 'Stop'],
   },
 }
 

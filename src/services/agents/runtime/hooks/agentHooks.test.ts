@@ -106,7 +106,7 @@ describe('agentHooks capability', () => {
     expect(reader).toHaveBeenCalledWith(cwd, { env: undefined })
     expect(states.find((state) => state.agentId === 'codex')?.approvalDetection).toEqual(detection)
     expect(states.filter((state) => state.approvalDetection?.source === 'signal').map((state) => state.agentId).sort()).toEqual(['claude-code', 'grok', 'opencode'])
-    expect(states.filter((state) => state.approvalDetection?.source === 'unavailable').map((state) => state.agentId).sort()).toEqual(['cursor', 'kiro'])
+    expect(states.filter((state) => state.approvalDetection?.source === 'unavailable').map((state) => state.agentId).sort()).toEqual(['agy', 'cursor', 'kiro'])
   })
 
   test('inspection without approvals never runs a CLI to read its config', async () => {
@@ -403,6 +403,22 @@ describe('agentHooks capability', () => {
     await post(url, tokenFor('rpty-p'), { agentId: 'not-an-agent', terminalId: 'rpty-p', pid: 4242, payload })
     await new Promise((r) => setTimeout(r, 150))
     expect(calls.length).toBe(3)
+  })
+
+  test('the bridge identifies native Agy events and wraps injected context', async () => {
+    const cap = makeCap()
+    const events = collect(cap)
+    const { dir } = await cap.endpoint()
+    const env = await cap.envForPty('agy-bridge', { PATH: process.env.PATH ?? '' })
+    cap.setPromptContext('agy-bridge', 'Use the assigned worker')
+    const payload = { conversationId: 'agy-session', workspacePaths: ['/workspace'] }
+    const output = await new Promise<string>((resolve, reject) => {
+      const child = execFile(process.execPath, [path.join(dir, 'cate-hook-bridge.js'), 'agy', 'PreInvocation'],
+        { env, timeout: 15_000 }, (error, stdout) => error ? reject(error) : resolve(stdout))
+      child.stdin!.end(JSON.stringify(payload))
+    })
+    expect(events).toEqual([expect.objectContaining({ agentId: 'agy', kind: 'turn-start', sessionId: 'agy-session', cwd: '/workspace' })])
+    expect(JSON.parse(output)).toEqual({ injectSteps: [{ systemMessage: { systemMessage: 'Use the assigned worker' } }] })
   })
 
   test.skipIf(!posix)('the generated bridge posts a stdin payload end-to-end (sh wrapper → node → HTTP)', async () => {

@@ -1,7 +1,7 @@
 # Installed agent hook regression CI
 
-`Agent CLI hooks` installs the latest Claude Code, Codex, Cursor, Grok, Kiro,
-and OpenCode on Linux. It runs on main pushes, pull requests to any branch (including
+`Agent CLI hooks` installs the latest Antigravity, Claude Code, Codex, Cursor,
+Grok, Kiro, and OpenCode on Linux. It runs on main pushes, pull requests to any branch (including
 forks and stacked PRs), merge queues, daily at 06:23 UTC, and manual dispatch. The daily run
 catches upstream changes without waiting for a Cate commit. Each job prints
 the installed version and uploads a JUnit report.
@@ -43,6 +43,7 @@ prompt context must reach the model request for each CLI that supports it.
 | Grok | Manual approval/rejection, tool/API failures, session exit |
 | OpenCode | Permission request/reply, tool failure, completed tool-part ingestion |
 | Kiro V3 | Native tool completion and terminal-input interrupt recovery |
+| Antigravity | Native `PreInvocation`/`PostToolUse`, terminal-input interrupt recovery, session resume |
 
 The Claude automatic-denial case exercises `PermissionDenied` with a classifier
 that does not return a usable verdict, a documented [PermissionDenied path](https://code.claude.com/docs/en/hooks#permissiondenied). It uses a disposable file outside the
@@ -84,6 +85,17 @@ and `.`) is two pieces on the screen and is not checked.
 | Grok, OpenCode | OpenAI Chat Completions SSE |
 | Cursor | Local authentication, model discovery, and Connect RPC response stream |
 | Kiro V3 | Local control-plane catalog and AWS event-stream response |
+| Antigravity | Gemini `streamGenerateContent` SSE through `GOOGLE_GEMINI_BASE_URL` |
+
+Antigravity runs with a disposable home, completed UI onboarding, a fake Gemini
+API key and `modelProvider: gemini`; no Google account session is opened. Its
+[documented custom endpoint](https://antigravity.google/docs/install) routes model
+traffic to the local fixture. Native hook payloads omit their event names, so
+Cate's per-event hook commands supply the name to the shared bridge. The
+[hook contract](https://antigravity.google/docs/hooks) carries `conversationId`,
+`workspacePaths`, `toolCall` and `stepIdx`; these are tested through the installed CLI.
+`PreInvocation` can repeat within a turn, and a `Stop` with `fullyIdle: false`
+does not mark the agent ready.
 
 The child environment excludes inherited credentials in mock mode. Configuration
 is disposable; Cursor uses its in-memory credential store so macOS Keychain is

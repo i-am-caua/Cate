@@ -129,6 +129,8 @@ describe('workspace usage', () => {
 
   function seedStores(at: number): Promise<void[]> {
     const iso = new Date(at).toISOString()
+    // Agy has a local store but does not report token counts.
+    mkdirSync(path.join(home, '.gemini', 'antigravity-cli'), { recursive: true })
     const claude = path.join(home, '.claude', 'projects', '-proj')
     mkdirSync(claude, { recursive: true })
     const usage = { input_tokens: 1000, output_tokens: 100 }
@@ -172,7 +174,7 @@ describe('workspace usage', () => {
     const summary = await service().summary(input)
 
     expect(Object.fromEntries(summary.stores.map((a) => [a.agent, [a.status, a.sessions]]))).toEqual({
-      'claude-code': ['ok', 2], codex: ['ok', 1], grok: ['ok', 1], opencode: ['ok', 1], kiro: ['unsupported', 0], cursor: ['unsupported', 0],
+      'claude-code': ['ok', 2], codex: ['ok', 1], grok: ['ok', 1], opencode: ['ok', 1], kiro: ['unsupported', 0], cursor: ['unsupported', 0], agy: ['unsupported', 0],
     })
     expect(summary.stores.find((a) => a.agent === 'kiro')?.note).toBe('Kiro records credits, not tokens: 0.50 credits across 1 session.')
 
@@ -191,7 +193,7 @@ describe('workspace usage', () => {
     expect(summary.costUsd).toBeCloseTo(summary.agents.reduce((sum, a) => sum + a.costUsd, 0))
     expect(summary.daily.map((d) => d.day)).toEqual(['2026-10-10'])
     expect(summary.daily[0].byAgent.codex?.costUsd).toBeCloseTo(byAgent.codex.costUsd)
-    expect(summary.notes).toEqual(['Cursor keeps no token counts on this machine.', 'Kiro records credits, not tokens: 0.50 credits across 1 session.'])
+    expect(summary.notes).toEqual(['Cursor keeps no token counts on this machine.', 'Kiro records credits, not tokens: 0.50 credits across 1 session.', 'Antigravity keeps no token counts on this machine.'])
 
     // A later scan reads the cache, and an offline one keeps the saved rates.
     const warm = await service({ fetchRates: async () => { throw new Error('offline') } }).summary(input)

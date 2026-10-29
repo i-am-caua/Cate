@@ -38,7 +38,7 @@ function relocatedStore(agentId: AgentId, env: Record<string, string>): [string,
     // Kiro V3 keeps them under KIRO_HOME; earlier versions under HOME.
     case 'kiro': return ['.kiro/sessions', existsSync(path.join(env.KIRO_HOME, 'sessions')) ? path.join(env.KIRO_HOME, 'sessions') : path.join(env.HOME, '.kiro', 'sessions')]
     case 'opencode': return ['.local/share/opencode', path.join(env.XDG_DATA_HOME, 'opencode')]
-    case 'agy': return null
+    case 'agy': return ['.gemini/antigravity-cli', path.join(env.HOME, '.gemini/antigravity-cli')]
   }
 }
 
@@ -104,7 +104,7 @@ describe.skipIf(process.env.CATE_LIVE_AGENT_CLIS !== '1')('installed agent full 
           opencode: { name: 'write', arguments: { filePath: path.join(cwd, 'created.txt'), content: 'after\n' } },
           kiro: { name: 'fs_write', arguments: { path: path.join(cwd, 'created.txt'), text: 'after\n' } },
           cursor: { name: 'Write', arguments: { path: path.join(cwd, 'created.txt'), text: 'after\n' } },
-          agy: { name: 'write_file', arguments: { Path: path.join(cwd, 'created.txt'), Content: 'after\n' } },
+          agy: { name: 'write_file', arguments: { Path: path.join(cwd, 'created.txt'), Content: 'after\n', Overwrite: true } },
         }[agentId]
         let recovering = false
         let followupAnswer: string | undefined
@@ -116,7 +116,7 @@ describe.skipIf(process.env.CATE_LIVE_AGENT_CLIS !== '1')('installed agent full 
           opencode: { name: 'bash', arguments: { command, description: 'Lifecycle fixture command' } },
           kiro: { name: 'execute_bash', arguments: { command } },
           cursor: { name: 'Shell', arguments: { command } },
-          agy: { name: 'run_command', arguments: { CommandLine: command } },
+          agy: { name: 'run_command', arguments: { CommandLine: command, toolSummary: 'Fixture command', WaitMsBeforeAsync: 1000 } },
         }[agentId]
         const tool = scenario === 'edit' ? edit : shell
         const provider = await createHookMockProvider({ reply: (input, protocol) => {
@@ -125,7 +125,7 @@ describe.skipIf(process.env.CATE_LIVE_AGENT_CLIS !== '1')('installed agent full 
           if (['resume', 'session-end', 'session-reset'].includes(scenario)) return { type: 'text', text: followupAnswer }
           if (scenario === 'interrupt') return { type: 'text', text: followupAnswer, hold: !recovering && (data.includes('CATE_LIFECYCLE') || protocol.endsWith('/RunSSE')) }
           if (scenario === 'provider-failure' && data.includes('CATE_LIFECYCLE')) return { type: 'error' }
-          return (agentId === 'cursor' && protocol.endsWith('/RunSSE')) || data.includes('CATE_LIFECYCLE') && data.includes(tool.name) && !data.includes('call_cate_lifecycle')
+          return (agentId === 'cursor' && protocol.endsWith('/RunSSE')) || data.includes('CATE_LIFECYCLE') && data.includes(tool.name) && !data.includes('call_cate_lifecycle') && !data.includes('"functionResponse"')
             ? { type: 'tool', ...tool } : { type: 'text' }
         } })
         const proxy = createServer((req, res) => {
@@ -244,6 +244,10 @@ describe.skipIf(process.env.CATE_LIVE_AGENT_CLIS !== '1')('installed agent full 
               return undefined
             },
             complete: async (screen) => {
+              if (scenario === 'resume' && agentId === 'agy') {
+                const session = events.find((event) => event.sessionId)
+                if (!session || !(await readSession(agentId, env, directory, session))?.some((message) => message.role === 'assistant' && message.text.includes(provider.answer))) return false
+              }
               if (scenario === 'resume' && agentId === 'claude-code') {
                 // Stop precedes Claude's asynchronous transcript flush. Preserve
                 // a resumable conversation before this fixture kills the PTY.
@@ -286,6 +290,7 @@ describe.skipIf(process.env.CATE_LIVE_AGENT_CLIS !== '1')('installed agent full 
             const commonArgs = launch.args.slice(0, -1)
             let args: string[]
             if (agentId === 'codex' || agentId === 'kiro') args = [...resumeArgs, 'CATE_RESUMED']
+            else if (agentId === 'agy') args = [...commonArgs.slice(0, -1), ...resumeArgs]
             else if (agentId === 'opencode') args = [...commonArgs.slice(0, -1), ...resumeArgs]
             else args = [...commonArgs, ...resumeArgs, 'CATE_RESUMED']
             const boundary = events.length
@@ -293,15 +298,16 @@ describe.skipIf(process.env.CATE_LIVE_AGENT_CLIS !== '1')('installed agent full 
             let resumedTypedAt = 0, resumedSubmitted = false
             await runLiveTui(AGENT_DEFS[agentId].command, args, {
               cwd, env: terminalEnv, renderScreen: true, timeout: 60_000,
-              respond: agentId === 'opencode' ? (screen) => {
-                if (!resumedTypedAt && screen.includes('ctrl+p')) { resumedTypedAt = Date.now(); return 'CATE_RESUMED' }
+              respond: agentId === 'opencode' || agentId === 'agy' ? (screen) => {
+                const loaded = agentId === 'agy' ? screen.includes(provider.answer) : screen.includes('ctrl+p')
+                if (!resumedTypedAt && loaded) { resumedTypedAt = Date.now(); return 'CATE_RESUMED' }
                 if (resumedTypedAt && !resumedSubmitted && Date.now() - resumedTypedAt > 500) { resumedSubmitted = true; hooks.noteInput(terminalId, '\r'); return '\r' }
                 return undefined
               } : undefined,
               complete: (screen) => events.slice(boundary).some((event) => event.kind === 'turn-end') && screen.replace(/\s/g, '').includes(followupAnswer!),
             })
             expect(events.slice(boundary).some((event) => event.kind === 'turn-start')).toBe(true)
-            expect(events.slice(boundary).filter((event) => ['turn-start', 'turn-end'].includes(event.kind)).every((event) => event.sessionId === session)).toBe(true)
+            expect([...new Set(events.slice(boundary).filter((event) => ['turn-start', 'turn-end'].includes(event.kind)).map((event) => event.sessionId))]).toEqual([session])
           }
           if (scenario === 'automatic-denial') {
             expect(posts.some((post) => post.hook_event_name === 'PermissionDenied')).toBe(true)

@@ -13,7 +13,8 @@ test('real CLI scenarios cover every hook Cate installs', () => {
       if (agent === 'opencode') {
         installed.push(...JSON.parse(content.match(/const TRACKED = new Set\((\[[^\n]+\])\)/)![1]))
       } else {
-        const { hooks } = JSON.parse(content)
+        const parsed = JSON.parse(content)
+        const hooks = agent === 'agy' ? parsed['cate-hook'] : parsed.hooks
         installed.push(...(Array.isArray(hooks) ? hooks.map((hook: { trigger: string }) => hook.trigger) : Object.keys(hooks)))
       }
     }
