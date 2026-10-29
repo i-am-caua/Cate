@@ -7,7 +7,7 @@
 Converts validated Alethe plans or playbook profiles into Cate setup specifications.
 Stdlib only.
 """
-import argparse, json, os, subprocess, sys
+import argparse, json, os, sys
 from pathlib import Path
 
 # Add scripts directory to path to reuse alethe utilities
@@ -17,35 +17,6 @@ if SCRIPT_DIR not in sys.path:
 
 import cate_bridge
 import orchestrate
-
-
-# Pinned defaults used when a profile tier does not define a provider entry.
-NODE_TIER_DEFAULTS = {
-    "agy": {
-        "cheap": {"model": "gemini-3.8-flash-low", "effort": "low"},
-        "standard": {"model": "gemini-4-argon-medium", "effort": "medium"},
-        "strong": {"model": "gemini-4-argon-high", "effort": "high"},
-    },
-    "codex": {
-        "cheap": {"model": "gpt-6-luna", "effort": "low"},
-        "standard": {"model": "gpt-6-luna", "effort": "medium"},
-        "strong": {"model": "gpt-6-luna", "effort": "high"},
-    },
-    "opencode": {
-        "cheap": {"model": "opencode/glm-5.3-flash-free", "effort": "low"},
-        "standard": {"model": "opencode/deepseek-v4.1-flash-free", "effort": "medium"},
-        "strong": {"model": "opencode/deepseek-v4.1-flash-free", "effort": "high"},
-    },
-    "claude-code": {
-        "cheap": {"model": "claude-sonnet-5-5-medium", "effort": "medium"},
-        "standard": {"model": "claude-sonnet-5-5-medium", "effort": "medium"},
-        "strong": {"model": "claude-opus-5-5-high", "effort": "high"},
-    },
-}
-
-# Read-only volume phases always run on the cheap tier, even when the playbook
-# leaves them at the default standard tier.
-CHEAP_WORKER_ROLES = {"scout", "investigate", "follow-up", "follow_up", "triage", "check", "worker"}
 
 
 def map_provider(prov):
@@ -113,7 +84,7 @@ def export_plan(plan_path):
     profiles = parsed.get("profiles", {})
     prof_data = profiles.get(parsed.get("profile") or "base", {}) or {}
 
-    lead_agent = resolve_lead_agent() or "agy"
+    lead_agent = resolve_lead_agent() or next(iter(provider_order(prof_data, parsed)), None)
     lead_spec = resolve_node_spec(
         "planner", "read-only", "standard", prof_data, parsed, explicit_provider=lead_agent
     )
@@ -221,207 +192,101 @@ def export_plan(plan_path):
     return setup
 
 
-def resolve_agent_for_phase(role, mode, tier, prof_data, parsed, who=None):
-    role_lower = (role or "").lower()
-
-    # Cheap volume phases stay on the cheap provider. Lead planner/brief phases
-    # belong to the orchestrator and are merged into the lead node by export_profile.
-    if tier == "cheap":
-        if who == "lead" and any(k in role_lower for k in ("planner", "brief")):
-            return "agy"
-        if any(k in role_lower for k in ("triage", "checker", "check")):
-            return "opencode"
-        if any(k in role_lower for k in ("scout", "investigate", "follow-up", "follow_up", "read", "extractor", "worker")):
-            return "agy"
-
-    # 1. Judgments / high-level validation / bug hunting / architecture / advice:
-    # Top tier reasoning: Agy (Gemini 4 Argon / Claude Sonnet/Opus 5.5)
-    if any(k in role_lower for k in ("judge", "advisor", "consult", "bugs", "bug-hunter", "validator", "validate", "planner", "brief")):
-        return "agy"
-    
-    # 2. Code implementation / writers / fixers:
-    # Execution workers: Codex (GPT-6 Luna free)
-    if any(k in role_lower for k in ("build", "builder", "fix", "fixer", "do it yourself", "execute", "writer", "do")):
-        return "codex"
-    
-    # 3. Reviewers / checkers / skeptics / triage:
-    # Strong free reasoning: OpenCode (DeepSeek V4.1 Flash score 45, GLM-5.3 Flash score 42)
-    if any(k in role_lower for k in ("reviewer", "revisor", "checker", "skeptic", "conventions", "audit", "triage")):
-        return "opencode"
-    
-    # 4. Volume scouts / bulk extraction:
-    # High volume / fast reads: Agy (Gemini 3.8 Flash score 41)
-    if any(k in role_lower for k in ("scout", "read", "extractor")):
-        return "agy"
-    
-    # Fallback to tier specification:
-    tier_spec = prof_data.get("tiers", {}).get(tier, {}) or parsed.get("tiers", {}).get(tier, {})
-    if "agy" in tier_spec:
-        return "agy"
-    if "opencode" in tier_spec:
-        return "opencode"
-    if "codex" in tier_spec:
-        return "codex"
-    if "claude" in tier_spec:
-        return "claude-code"
-    return map_provider("auto") or "agy"
+def provider_order(prof_data, parsed):
+    providers = parsed.get("providers", [])
+    order = prof_data.get("order", providers)
+    return list(dict.fromkeys([p for p in order if p in providers] + providers))
 
 
 def resolve_node_spec(role, mode, tier, prof_data, parsed,
                       explicit_provider=None, explicit_model=None, explicit_effort=None):
-    """Resolve the Cate agent and the pinned model/effort for one setup node."""
+    """Resolve the declared profile, never infer providers or tiers from role names."""
     tier = tier or "standard"
-
-    agent = map_provider(explicit_provider) if explicit_provider else None
-    if not agent:
-        agent = resolve_agent_for_phase(role, mode, tier, prof_data, parsed)
-    agent = agent or "agy"
-
-    tier_map = prof_data.get("tiers", {}).get(tier, {}) or parsed.get("tiers", {}).get(tier, {})
-    fallback_tier_map = parsed.get("tiers", {}).get(tier, {})
-    prov_key = "claude" if agent == "claude-code" else agent
-    spec = tier_map.get(prov_key) or fallback_tier_map.get(prov_key) or {}
-
-    model = explicit_model or spec.get("model")
-    effort = explicit_effort or spec.get("effort")
-
-    defaults = (
-        NODE_TIER_DEFAULTS.get(agent, {}).get(tier)
-        or NODE_TIER_DEFAULTS.get(agent, {}).get("standard")
-        or {}
-    )
-    model = model or defaults.get("model")
-    effort = effort or defaults.get("effort")
-
-    return {"agent": agent, "model": model, "effort": effort, "tier": tier}
+    order = provider_order(prof_data, parsed)
+    provider = explicit_provider if explicit_provider and explicit_provider != "auto" else next(iter(order), None)
+    agent = map_provider(provider) if provider and provider != "auto" else None
+    if not agent or agent not in {map_provider(p) for p in order}:
+        raise orchestrate.PlanError(f"provider {provider!r} is unavailable in this profile or has no Cate agent")
+    key = "claude" if agent == "claude-code" else agent
+    spec = {**parsed.get("tiers", {}).get(tier, {}).get(key, {}),
+            **prof_data.get("tiers", {}).get(tier, {}).get(key, {})}
+    return {"agent": agent, "model": explicit_model or spec.get("model"),
+            "effort": explicit_effort or spec.get("effort"), "tier": tier}
 
 
-def resolve_phase_tier(ph):
-    """Cheap volume phases run on the cheap tier even when the playbook says standard."""
-    tier = ph.get("tier") or "standard"
-    role = (ph.get("role") or "").strip().lower()
-    ph_id = (ph.get("id") or "").strip().lower()
-    if tier == "standard" and (role in CHEAP_WORKER_ROLES or ph_id in CHEAP_WORKER_ROLES):
-        return "cheap"
-    return tier
+FLOW_INSTRUCTIONS = """Coordinate this playbook using the existing panels identified by setup node id.
+Only the orchestrator dispatches work, using cate agent send; wait/read replies before deciding the next phase.
+Evaluate if/with branches, gates and first-matching rules; retain limits, then/after, quota and budget policies.
+A rescue phase reuses its assigned panel and session; never start a replacement executor for a continuation.
+Conditional phases remain idle until their condition holds. Do not execute every phase as a linear sequence.
+Worker counts are capacity: dispatch only the units that need a phase, including individual rescue follow-ups.
+Panel model/effort are the baseline. If a rule needs a different model, report the required escalation before proceeding.
+Worktrees and read-only modes are requirements to enforce when dispatching, not evidence of sandbox enforcement.
+Workflow (phase nodes reference the setup ids; map these to the launched panel ids):"""
+
+
+def profile_setups(profile_name, parsed):
+    profiles = parsed.get("profiles", {})
+    if profile_name not in profiles:
+        raise orchestrate.PlanError(f"unknown profile {profile_name!r}")
+    prof = profiles[profile_name]
+    setups = []
+    for pb_id, pb in parsed.get("playbooks", {}).items():
+        phases = pb.get("phases", [])
+        lead_phase = next((p for p in phases if p.get("who") == "lead"), {"tier": "strong", "readOnly": True})
+        lead_spec = resolve_node_spec("planner", "read-only", lead_phase.get("tier"), prof, parsed,
+                                      lead_phase.get("provider"), lead_phase.get("model"), lead_phase.get("effort"))
+        nodes = [{"id": "lead", **lead_spec, "title": "Orquestrador", "orchestrator": True,
+                  "mode": "read-only", "worktree": None}]
+        assignments = []
+        sessions = []
+        used = {"lead"}
+        for i, ph in enumerate(phases):
+            phase_id = ph.get("id") or f"phase-{i + 1}"
+            role = ph.get("role") or phase_id
+            if ph.get("who") == "lead":
+                ids = ["lead"]
+            elif ph.get("runner") == "rescue":
+                prior = next((entry for entry in reversed(sessions) if entry[0] == role), None)
+                if not prior:
+                    raise orchestrate.PlanError(f"{pb_id}/{phase_id}: rescue needs an earlier {role!r} session")
+                ids = prior[1]
+                # Continuations keep their original model, checkout and read-only mode.
+            else:
+                mode = "read-only" if ph.get("readOnly") else "write"
+                spec = resolve_node_spec(role, mode, ph.get("tier"), prof, parsed,
+                                         ph.get("provider"), ph.get("model"), ph.get("effort"))
+                ids = []
+                for index in range(ph.get("workers") or 1):
+                    node_id = cate_bridge.slug(phase_id + (f"-{index + 1}" if (ph.get("workers") or 1) > 1 else ""))
+                    if node_id in used:
+                        raise orchestrate.PlanError(f"{pb_id}: duplicate node id {node_id!r}")
+                    used.add(node_id)
+                    ids.append(node_id)
+                    nodes.append({"id": node_id, **spec, "title": role, "orchestrator": False,
+                                  "mode": mode, "worktree": cate_bridge.slug(f"{pb_id}-{node_id}") if ph.get("isolate") and mode == "write" else None,
+                                  "prompt": ph.get("does") or f"Execute phase {role}"})
+                sessions.append((role, ids))
+            assignments.append({**ph, "id": phase_id, "nodes": ids})
+        workflow = {"playbook": pb_id, "profile": profile_name,
+                    "principles": parsed.get("principles", []),
+                    "quota": {**parsed.get("quota", {}), **prof.get("quota", {})},
+                    "budget": parsed.get("budget", {}), "next": pb.get("next"), "phases": assignments}
+        nodes[0]["prompt"] = FLOW_INSTRUCTIONS + "\n" + json.dumps(workflow, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        # Star relations keep dispatch and conditional decisions with the orchestrator.
+        edges = [{"from": "lead", "to": n["id"],
+                  "kind": "context" if n["mode"] == "read-only" else "trigger", "label": n["title"]}
+                 for n in nodes[1:]]
+        setups.append({"version": 1, "id": cate_bridge.slug(f"{profile_name}-{pb_id}"),
+                       "name": f"{pb.get('name', pb_id)} ({profile_name})", "source": "alethe",
+                       "description": prof.get("summary", ""), "nodes": nodes, "edges": edges,
+                       "budget": {"maxWorkers": len(nodes)}})
+    return setups
 
 
 def export_profile(profile_name):
-    policy_path = orchestrate.default_policy_path()
-    try:
-        _, parsed = orchestrate.loaded_playbooks(policy_path)
-    except Exception as e:
-        sys.exit(f"failed to load playbooks: {e}")
-
-    profiles = parsed.get("profiles", {})
-    if profile_name not in profiles:
-        avail = ", ".join(sorted(profiles.keys()))
-        sys.exit(f"unknown profile '{profile_name}'. Available profiles: {avail}")
-
-    prof_data = profiles[profile_name]
-    playbooks = parsed.get("playbooks", {})
-    profile_order = prof_data.get("order") or parsed.get("providers") or []
-    lead_agent = (map_provider(profile_order[0]) if profile_order else None) or resolve_lead_agent() or "agy"
-    lead_spec = resolve_node_spec(
-        "planner", "read-only", "standard", prof_data, parsed, explicit_provider=lead_agent
-    )
-    setups = []
-
-    print(
-        "Note: profile export emits linear phase setups without conditional branching or escalation phases",
-        file=sys.stderr,
-    )
-
-    for pb_id, pb in playbooks.items():
-        setup_id = cate_bridge.slug(f"{profile_name}-{pb_id}")
-        setup_name = f"{pb.get('name', pb_id)} ({profile_name})"
-        phases = pb.get("phases", [])
-
-        lead_prompt = "Orquestrar as fases do playbook usando Gemini 4 Argon."
-        start_idx = 0
-        if len(phases) > 1 and phases[0].get("who") == "lead":
-            first_does = (phases[0].get("does") or "").strip()
-            if first_does:
-                lead_prompt = f"{lead_prompt}\n\n{first_does}"
-            start_idx = 1
-
-        nodes = [
-            {
-                "id": "lead",
-                "agent": lead_spec["agent"],
-                "model": lead_spec["model"],
-                "effort": lead_spec["effort"],
-                "tier": "standard",
-                "title": "Orquestrador (Argon)",
-                "orchestrator": True,
-                "prompt": lead_prompt,
-                "worktree": None,
-                "mode": "read-only",
-            }
-        ]
-        edges = []
-        prev_node_id = "lead"
-
-        for idx, ph in enumerate(phases[start_idx:], start=start_idx):
-            ph_id = ph.get("id") or f"phase-{idx+1}"
-            role = ph.get("role") or ph_id
-            mode = "read-only" if ph.get("readOnly") else "write"
-            tier = resolve_phase_tier(ph)
-            spec = resolve_node_spec(
-                role,
-                mode,
-                tier,
-                prof_data,
-                parsed,
-                explicit_provider=ph.get("provider"),
-                explicit_model=ph.get("model"),
-                explicit_effort=ph.get("effort"),
-            )
-            wt = cate_bridge.slug(f"{pb_id}-{ph_id}") if (ph.get("isolate") and mode == "write") else None
-            prompt = ph.get("does", "")
-
-            nodes.append({
-                "id": ph_id,
-                "agent": spec["agent"],
-                "model": spec["model"],
-                "effort": spec["effort"],
-                "tier": spec["tier"],
-                "title": role,
-                "orchestrator": False,
-                "mode": mode,
-                "worktree": wt,
-                "prompt": prompt or f"Executar a fase {role}",
-            })
-
-            role_lower = role.lower()
-            if any(k in role_lower for k in ("checker", "reviewer", "revisor", "verify", "audit", "gate")):
-                kind = "verify"
-            elif mode == "read-only" or any(k in role_lower for k in ("scout", "planner", "research")):
-                kind = "context"
-            else:
-                kind = "trigger"
-
-            after = ph.get("after")
-            from_node = after if (after and any(n["id"] == after for n in nodes)) else prev_node_id
-            edges.append({
-                "from": from_node,
-                "to": ph_id,
-                "kind": kind,
-                "label": role,
-            })
-            prev_node_id = ph_id
-
-        setups.append({
-            "version": 1,
-            "id": setup_id,
-            "name": setup_name,
-            "source": "alethe",
-            "nodes": nodes,
-            "edges": edges,
-            "budget": {"maxWorkers": len(nodes)},
-        })
-
-    return setups
+    _, parsed = orchestrate.loaded_playbooks(orchestrate.default_policy_path())
+    return profile_setups(profile_name, parsed)
 
 
 def save_single_setup_to_cate(setup_data, scope="global"):
@@ -431,8 +296,7 @@ def save_single_setup_to_cate(setup_data, scope="global"):
         out_dir = os.path.join(os.getcwd(), ".cate", "setups")
     os.makedirs(out_dir, exist_ok=True)
     dest = os.path.join(out_dir, f"{setup_data['id']}.json")
-    with open(dest, "w", encoding="utf-8") as f:
-        json.dump(setup_data, f, indent=2)
+    orchestrate.atomic_write_text(Path(dest), json.dumps(setup_data, indent=2, ensure_ascii=False) + "\n")
     print(f"saved {scope} setup: {dest}")
 
 
@@ -484,7 +348,10 @@ def main():
     prof_parser.set_defaults(fn=cmd_profile)
 
     args = ap.parse_args()
-    args.fn(args)
+    try:
+        args.fn(args)
+    except orchestrate.PlanError as error:
+        ap.exit(2, f"{error}\n")
 
 
 if __name__ == "__main__":

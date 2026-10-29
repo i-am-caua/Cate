@@ -828,17 +828,7 @@ export const CateHookBridge = async () => {
     event: async ({ event }) => dispatchEvent(event),
   }
 }
-export default {
-  id: "cate-hook",
-  setup: async (api) => {
-    if (!ENDPOINT || !TOKEN) return {}
-    if (api?.event?.subscribe) {
-      api.event.subscribe(async (event) => {
-        await dispatchEvent(event)
-      })
-    }
-  },
-}
+
 `
 
 const opencodeSpec: AgentHookSpec = {
@@ -948,6 +938,7 @@ const kiroSpec: AgentHookSpec = {
 }
 
 const agySpec: AgentHookSpec = {
+  repeatsTurnStart: true,
   interrupt: { via: 'input' },
   projectFiles: [
     {
@@ -955,10 +946,10 @@ const agySpec: AgentHookSpec = {
       build: (existing, ctx) => {
         const ours = () => ({
           'cate-hook': {
-            SessionStart: [{ type: 'command', command: ctx.bridgeCommand }],
-            PreInvocation: [{ type: 'command', command: ctx.bridgeCommand }],
-            PostToolUse: [{ matcher: '.*', hooks: [{ type: 'command', command: ctx.bridgeCommand }] }],
-            Stop: [{ type: 'command', command: ctx.bridgeCommand }],
+            SessionStart: [{ type: 'command', command: `${ctx.bridgeCommand} SessionStart` }],
+            PreInvocation: [{ type: 'command', command: `${ctx.bridgeCommand} PreInvocation` }],
+            PostToolUse: [{ matcher: '.*', hooks: [{ type: 'command', command: `${ctx.bridgeCommand} PostToolUse` }] }],
+            Stop: [{ type: 'command', command: `${ctx.bridgeCommand} Stop` }],
           },
         })
         if (existing === null) return JSON.stringify(ours(), null, 2) + '\n'
@@ -991,7 +982,7 @@ const agySpec: AgentHookSpec = {
     const sessionId = str(p.session_id) ?? str(p.sessionId) ?? str(p.conversation_id) ?? str(p.conversationId)
     const base = {
       sessionId,
-      cwd: str(p.cwd) ?? str(p.workspace) ?? undefined,
+      cwd: str(p.cwd) ?? str(p.workspace) ?? (Array.isArray(p.workspacePaths) ? str(p.workspacePaths[0]) : null) ?? undefined,
       transcriptPath: str(p.transcriptPath) ?? str(p.transcript_path) ?? undefined,
     }
     const event = str(p.hook_event_name) ?? str(p.event)
@@ -1007,13 +998,26 @@ const agySpec: AgentHookSpec = {
       case 'turn-resume': return { kind: 'turn-resume', ...base }
       case 'stop':
       case 'Stop':
-      case 'turn-end': return { kind: 'turn-end', ...base }
+      case 'turn-end': return p.fullyIdle === false ? null : { kind: 'turn-end', ...base }
       case 'sessionEnd':
       case 'session-end': return { kind: 'session-end', ...base }
       default: return null
     }
   },
-  toolCall: () => null,
+  toolCall: (p) => {
+    if (p.hook_event_name !== 'PostToolUse') return null
+    const tool = obj(p.toolCall)
+    if (!str(tool.name)) return null
+    const args = obj(tool.args)
+    return reportedToolCall(p, {
+      sessionId: str(p.conversationId), name: str(tool.name)!,
+      input: { ...args, file_path: args.Path ?? args.TargetFile, content: args.Content ?? args.CodeContent,
+        old_string: args.Target, new_string: args.Replacement, command: args.CommandLine },
+      output: undefined,
+      callId: typeof p.stepIdx === 'number' ? String(p.stepIdx) : undefined,
+      cwd: str(args.Cwd) ?? (Array.isArray(p.workspacePaths) ? str(p.workspacePaths[0]) : null) ?? undefined,
+    }, typeof p.error === 'string' && p.error.length > 0)
+  },
 }
 
 // ---------------------------------------------------------------------------

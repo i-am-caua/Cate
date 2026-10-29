@@ -19,6 +19,11 @@ interface PermissionFixture {
 }
 
 const fixtures: AgentLifecycleFixture[] = [
+  { agentId: 'agy',
+    sessionStart: { hook_event_name: 'SessionStart', conversationId: SESSION },
+    turnStart: { hook_event_name: 'PreInvocation', conversationId: SESSION },
+    turnEnd: { hook_event_name: 'Stop', conversationId: SESSION, fullyIdle: true },
+  },
   {
     agentId: 'claude-code',
     sessionStart: { hook_event_name: 'SessionStart', session_id: SESSION },

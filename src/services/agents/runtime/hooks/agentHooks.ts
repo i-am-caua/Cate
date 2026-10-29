@@ -282,6 +282,8 @@ process.stdin.on('end', () => {
   if (ranBy !== (HOOK_RUNNER_ENV[agentId] ? agentId : null)) finish()
   let payload
   try { payload = JSON.parse(data) } catch { payload = { raw: data } }
+  // Some CLIs omit the event name; their injection command supplies it.
+  if (process.argv[3]) payload.hook_event_name = process.argv[3]
   const body = JSON.stringify({ agentId, terminalId: process.env.${CATE_TERMINAL_ID_ENV} || null, pid: process.ppid, payload })
   const req = http.request(endpoint + '/hook', {
     method: 'POST',

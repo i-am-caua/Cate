@@ -3,23 +3,24 @@
   "id": "base-review-gate",
   "name": "Review gate (base)",
   "source": "alethe",
+  "description": "Each tier on its usual model.",
   "nodes": [
     {
       "id": "lead",
-      "agent": "agy",
-      "model": "gemini-4-argon-medium",
+      "agent": "claude-code",
+      "model": "sonnet",
       "effort": "medium",
       "tier": "standard",
-      "title": "Orquestrador (Argon)",
+      "title": "Orquestrador",
       "orchestrator": true,
-      "prompt": "Orquestrar as fases do playbook usando Gemini 4 Argon.\n\nHand the finished diff and the repository rules to triage.",
+      "mode": "read-only",
       "worktree": null,
-      "mode": "read-only"
+      "prompt": "Coordinate this playbook using the existing panels identified by setup node id.\nOnly the orchestrator dispatches work, using cate agent send; wait/read replies before deciding the next phase.\nEvaluate if/with branches, gates and first-matching rules; retain limits, then/after, quota and budget policies.\nA rescue phase reuses its assigned panel and session; never start a replacement executor for a continuation.\nConditional phases remain idle until their condition holds. Do not execute every phase as a linear sequence.\nWorker counts are capacity: dispatch only the units that need a phase, including individual rescue follow-ups.\nPanel model/effort are the baseline. If a rule needs a different model, report the required escalation before proceeding.\nWorktrees and read-only modes are requirements to enforce when dispatching, not evidence of sandbox enforcement.\nWorkflow (phase nodes reference the setup ids; map these to the launched panel ids):\n{\"budget\":{\"warnAt\":80,\"whenLow\":\"finish-and-report\"},\"next\":null,\"phases\":[{\"does\":\"Hand the finished diff and the repository rules to triage.\",\"id\":\"brief\",\"nodes\":[\"lead\"],\"readOnly\":true,\"role\":\"planner\",\"tier\":\"standard\",\"who\":\"lead\"},{\"does\":\"Skip trivial diffs; otherwise list the paths that need review.\",\"id\":\"triage\",\"nodes\":[\"triage\"],\"readOnly\":true,\"role\":\"triage\",\"runner\":\"economy\",\"tier\":\"cheap\"},{\"does\":\"Check the diff against the repository's rules and conventions; give each reviewer its own focus, such as naming and structure, or tests and error handling.\",\"id\":\"conventions\",\"nodes\":[\"conventions-1\",\"conventions-2\"],\"readOnly\":true,\"returns\":\"Findings with file:line and the rule each one breaks, plus the checks that passed.\",\"role\":\"reviewer\",\"runner\":\"research\",\"tier\":\"standard\",\"workers\":2},{\"does\":\"Look only for real bugs in the diff.\",\"id\":\"bugs\",\"nodes\":[\"bugs\"],\"readOnly\":true,\"returns\":\"Findings with file:line and a failure scenario.\",\"role\":\"bug-hunter\",\"rules\":[{\"if\":\"claude-opus-above:80\",\"use\":{\"effort\":\"high\",\"model\":\"sonnet\"}}],\"tier\":\"strong\",\"with\":\"conventions\"},{\"does\":\"Confirm or reject each finding against the code; a finding two providers reported on their own needs no second check.\",\"gate\":\"The verdict is PASS and no confirmed finding is left.\",\"id\":\"validate\",\"nodes\":[\"validate\"],\"readOnly\":true,\"returns\":\"Each finding confirmed or rejected with evidence, then a VERDICT line of PASS, FAIL or NOT_PROVEN.\",\"role\":\"validator\",\"runner\":\"economy\",\"tier\":\"strong\"},{\"after\":\"validate\",\"does\":\"Fix the confirmed findings only.\",\"id\":\"fix\",\"if\":\"findings-left\",\"limit\":\"At most 2 rounds, then hand the rest to the user.\",\"nodes\":[\"fix\"],\"readOnly\":false,\"role\":\"fixer\",\"runner\":\"economy\",\"then\":\"recheck\",\"tier\":\"standard\"}],\"playbook\":\"review-gate\",\"principles\":[\"Do the work yourself when briefing a worker would cost more; delegation always has a floor cost.\",\"Spend the strong tier on decisions and the cheap tier on volume.\",\"Pin every worker's model and effort; a worker without them runs on its CLI's default model, which can be the most expensive one.\",\"Keep your context small; workers return answers, evidence and diffs, never transcripts.\",\"Split by independent unit and no finer; more, narrower briefs raised the bill in Anthropic's own run.\",\"Escalate on a failed check, never on a worker's own claim, one tier at a time and once per unit.\",\"Review a finished diff, never work in progress.\",\"Keep a worker's model and effort fixed for its whole session; switching discards its prompt cache.\",\"Use xhigh only to escalate, and avoid max.\",\"Cap every run with a budget and compare cost per finished task.\",\"Cheap models triage and skip; judging whether code is correct takes the standard tier or above.\",\"A risky unit never runs on the cheap tier, and its diff goes through review-gate.\"],\"profile\":\"base\",\"quota\":{\"criticalThreshold\":80,\"onBothCritical\":\"ask\",\"planEnds\":{},\"spareMinLeft\":30,\"spareWithinHours\":24,\"stopAt\":95,\"whenLow\":\"switch-provider\",\"whenSpare\":\"spend-strong\"}}"
     },
     {
       "id": "triage",
-      "agent": "opencode",
-      "model": "opencode/glm-5.3-flash-free",
+      "agent": "claude-code",
+      "model": "haiku",
       "effort": "low",
       "tier": "cheap",
       "title": "triage",
@@ -29,9 +30,21 @@
       "prompt": "Skip trivial diffs; otherwise list the paths that need review."
     },
     {
-      "id": "conventions",
-      "agent": "opencode",
-      "model": "opencode/deepseek-v4.1-flash-free",
+      "id": "conventions-1",
+      "agent": "claude-code",
+      "model": "sonnet",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "reviewer",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "Check the diff against the repository's rules and conventions; give each reviewer its own focus, such as naming and structure, or tests and error handling."
+    },
+    {
+      "id": "conventions-2",
+      "agent": "claude-code",
+      "model": "sonnet",
       "effort": "medium",
       "tier": "standard",
       "title": "reviewer",
@@ -42,8 +55,8 @@
     },
     {
       "id": "bugs",
-      "agent": "agy",
-      "model": "gemini-4-argon-high",
+      "agent": "claude-code",
+      "model": "opus",
       "effort": "high",
       "tier": "strong",
       "title": "bug-hunter",
@@ -54,8 +67,8 @@
     },
     {
       "id": "validate",
-      "agent": "agy",
-      "model": "gemini-4-argon-high",
+      "agent": "claude-code",
+      "model": "opus",
       "effort": "high",
       "tier": "strong",
       "title": "validator",
@@ -66,8 +79,8 @@
     },
     {
       "id": "fix",
-      "agent": "codex",
-      "model": "gpt-6-luna",
+      "agent": "claude-code",
+      "model": "sonnet",
       "effort": "medium",
       "tier": "standard",
       "title": "fixer",
@@ -85,31 +98,37 @@
       "label": "triage"
     },
     {
-      "from": "triage",
-      "to": "conventions",
-      "kind": "verify",
+      "from": "lead",
+      "to": "conventions-1",
+      "kind": "context",
       "label": "reviewer"
     },
     {
-      "from": "conventions",
+      "from": "lead",
+      "to": "conventions-2",
+      "kind": "context",
+      "label": "reviewer"
+    },
+    {
+      "from": "lead",
       "to": "bugs",
       "kind": "context",
       "label": "bug-hunter"
     },
     {
-      "from": "bugs",
+      "from": "lead",
       "to": "validate",
       "kind": "context",
       "label": "validator"
     },
     {
-      "from": "validate",
+      "from": "lead",
       "to": "fix",
       "kind": "trigger",
       "label": "fixer"
     }
   ],
   "budget": {
-    "maxWorkers": 6
+    "maxWorkers": 7
   }
 }

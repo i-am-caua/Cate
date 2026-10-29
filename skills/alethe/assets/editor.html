@@ -1257,7 +1257,10 @@ function activeOrder() {
 }
 function tiersNow() {
   const out = {}
-  TIER_NAMES.forEach((tier) => { out[tier] = { ...(state.tiers[tier] ?? {}), ...(profileNow().tiers?.[tier] ?? {}) } })
+  TIER_NAMES.forEach((tier) => {
+    out[tier] = {}
+    state.providers.forEach(provider => { out[tier][provider] = { ...(state.tiers[tier]?.[provider] ?? {}), ...(profileNow().tiers?.[tier]?.[provider] ?? {}) } })
+  })
   return out
 }
 const routedVia = (provider) => Object.entries(state.routes).find(([, route]) => (route.carries ?? []).includes(provider))?.[0] ?? null
@@ -1376,8 +1379,8 @@ const supports = (provider, p) => !p.readOnly || PROVIDERS[provider]?.readOnly !
 const leadProvider = () => inventory()[0] ?? 'claude'
 const pinOf = (p) => (p.provider && p.provider !== 'auto' && state.providers.includes(p.provider) ? p.provider : null)
 function phaseBase(p) {
-  const provider = p.who === 'lead' ? leadProvider() : pinOf(p) ?? activeOrder().find((id) => supports(id, p)) ?? activeOrder()[0] ?? 'claude'
-  const keepModel = p.model && [null, provider].includes(modelOwner(p.model))
+  const provider = pinOf(p) ?? activeOrder().find((id) => supports(id, p)) ?? activeOrder()[0] ?? 'claude'
+  const keepModel = Boolean(p.model)
   return { provider, tier: p.tier ?? 'standard', model: keepModel ? p.model : null, effort: p.effort ?? null }
 }
 function nextProvider(from, p, c) {
@@ -2939,7 +2942,7 @@ function refresh() {
   history.replaceState(null, '', `${location.search}#${encodeURIComponent([state.wf, state.task, usageKey(), state.checks, state.budget, state.quota.onBothCritical, state.profile].join('/'))}`)
 }
 
-const slug = (s) => (s || '').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'x'
+const slug = (s) => (s || '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'x'
 
 function mapProviderToCate(prov) {
   if (!prov) return null
@@ -2954,157 +2957,71 @@ function mapProviderToCate(prov) {
   return null
 }
 
-function resolveAgentForTier(tierName, profileData, currentTiers) {
-  const pTier = profileData?.tiers?.[tierName]
-  const mergedTier = currentTiers?.[tierName] || {}
-  const t = (pTier && Object.keys(pTier).length) ? pTier : mergedTier
-  if (t.claude) return 'claude-code'
-  if (t.codex) return 'codex'
-  for (const k of Object.keys(t)) {
-    const m = mapProviderToCate(k)
-    if (m) return m
+const FLOW_INSTRUCTIONS = "Coordinate this playbook using the existing panels identified by setup node id.\nOnly the orchestrator dispatches work, using cate agent send; wait/read replies before deciding the next phase.\nEvaluate if/with branches, gates and first-matching rules; retain limits, then/after, quota and budget policies.\nA rescue phase reuses its assigned panel and session; never start a replacement executor for a continuation.\nConditional phases remain idle until their condition holds. Do not execute every phase as a linear sequence.\nWorker counts are capacity: dispatch only the units that need a phase, including individual rescue follow-ups.\nPanel model/effort are the baseline. If a rule needs a different model, report the required escalation before proceeding.\nWorktrees and read-only modes are requirements to enforce when dispatching, not evidence of sandbox enforcement.\nWorkflow (phase nodes reference the setup ids; map these to the launched panel ids):"
+// Pure counterpart of profile_setups in setup_export.py; parity is checked in tests.
+function profileSetups(profileName, data) {
+  const prof = data.profiles?.[profileName]
+  if (!prof) throw new Error(`unknown profile ${profileName}`)
+  const slugId = (s) => s.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'x'
+  const stable = value => Array.isArray(value) ? value.map(stable) : value && typeof value === 'object'
+    ? Object.fromEntries(Object.keys(value).sort().map(key => [key, stable(value[key])])) : value
+  const providers = data.providers || []
+  const order = [...new Set([...(prof.order || providers).filter(p => providers.includes(p)), ...providers])]
+  const specFor = (ph) => {
+    const provider = ph.provider && ph.provider !== 'auto' ? ph.provider : order[0]
+    const agent = mapProviderToCate(provider)
+    if (!agent || !order.map(mapProviderToCate).includes(agent)) throw new Error(`provider ${provider} is unavailable in this profile or has no Cate agent`)
+    const key = agent === 'claude-code' ? 'claude' : agent
+    const tier = ph.tier || 'standard'
+    const spec = { ...(data.tiers?.[tier]?.[key] || {}), ...(prof.tiers?.[tier]?.[key] || {}) }
+    return { agent, tier, model: ph.model || spec.model || null, effort: ph.effort || spec.effort || null }
   }
-  const top = (typeof activeOrder === 'function' ? activeOrder() : [])[0]
-  return mapProviderToCate(top) || 'codex'
-}
-
-const NODE_TIER_DEFAULTS = {
-  agy: {
-    cheap: { model: 'gemini-3.8-flash-low', effort: 'low' },
-    standard: { model: 'gemini-4-argon-medium', effort: 'medium' },
-    strong: { model: 'gemini-4-argon-high', effort: 'high' },
-  },
-  codex: {
-    cheap: { model: 'gpt-6-luna', effort: 'low' },
-    standard: { model: 'gpt-6-luna', effort: 'medium' },
-    strong: { model: 'gpt-6-luna', effort: 'high' },
-  },
-  opencode: {
-    cheap: { model: 'opencode/glm-5.3-flash-free', effort: 'low' },
-    standard: { model: 'opencode/deepseek-v4.1-flash-free', effort: 'medium' },
-    strong: { model: 'opencode/deepseek-v4.1-flash-free', effort: 'high' },
-  },
-  'claude-code': {
-    cheap: { model: 'claude-sonnet-5-5-medium', effort: 'medium' },
-    standard: { model: 'claude-sonnet-5-5-medium', effort: 'medium' },
-    strong: { model: 'claude-opus-5-5-high', effort: 'high' },
-  },
-}
-
-function resolveModelForTier(tierName, agent, profileData, currentTiers) {
-  const pTier = profileData?.tiers?.[tierName]
-  const mergedTier = currentTiers?.[tierName] || {}
-  const t = (pTier && Object.keys(pTier).length) ? pTier : mergedTier
-  const provKey = agent === 'claude-code' ? 'claude' : agent
-  const spec = t?.[provKey] || {}
-  const fallback = NODE_TIER_DEFAULTS[agent]?.[tierName] || NODE_TIER_DEFAULTS[agent]?.standard || {}
-  return {
-    model: spec.model || fallback.model || '',
-    effort: spec.effort || fallback.effort || '',
-  }
-}
-
-function getSetupDisplayName(pbKey, pb) {
-  if (pbKey === 'parallel-worktrees') return 'Parallel Setup'
-  const name = pb.name || cap(pbKey)
-  if (/\bsetup\b/i.test(name)) return name
-  return `${name} Setup`
+  return Object.entries(data.playbooks || {}).map(([pbId, pb]) => {
+    const phases = pb.phases || []
+    const lead = phases.find(p => p.who === 'lead') || { tier: 'strong', readOnly: true }
+    const nodes = [{ id: 'lead', ...specFor(lead), title: 'Orquestrador', orchestrator: true, mode: 'read-only', worktree: null }]
+    const sessions = []
+    const used = new Set(['lead'])
+    const assignments = phases.map((ph, i) => {
+      const id = ph.id || `phase-${i + 1}`
+      const role = ph.role || id
+      let ids
+      if (ph.who === 'lead') ids = ['lead']
+      else if (ph.runner === 'rescue') {
+        const prior = [...sessions].reverse().find(entry => entry.role === role)
+        if (!prior) throw new Error(`${pbId}/${id}: rescue needs an earlier ${role} session`)
+        ids = prior.ids
+      } else {
+        ids = []
+        const mode = ph.readOnly ? 'read-only' : 'write'
+        for (let j = 0; j < (ph.workers || 1); j++) {
+          const nodeId = slugId(id + ((ph.workers || 1) > 1 ? `-${j + 1}` : ''))
+          if (used.has(nodeId)) throw new Error(`${pbId}: duplicate node id ${nodeId}`)
+          used.add(nodeId)
+          ids.push(nodeId)
+          nodes.push({ id: nodeId, ...specFor(ph), title: role, orchestrator: false, mode,
+            worktree: ph.isolate && mode === 'write' ? slugId(`${pbId}-${nodeId}`) : null,
+            prompt: ph.does || `Execute phase ${role}` })
+        }
+        sessions.push({ role, ids })
+      }
+      return { ...ph, id, nodes: ids }
+    })
+    const workflow = { playbook: pbId, profile: profileName, principles: data.principles || [],
+      quota: { ...(data.quota || {}), ...(prof.quota || {}) }, budget: data.budget || {}, next: pb.next || null, phases: assignments }
+    nodes[0].prompt = FLOW_INSTRUCTIONS + '\n' + JSON.stringify(stable(workflow))
+    const edges = nodes.slice(1).map(n => ({ from: 'lead', to: n.id, kind: n.mode === 'read-only' ? 'context' : 'trigger', label: n.title }))
+    return { version: 1, id: slugId(`${profileName}-${pbId}`), name: `${pb.name || pbId} (${profileName})`,
+      source: 'alethe', description: prof.summary || '', nodes, edges, budget: { maxWorkers: nodes.length } }
+  })
 }
 
 function deriveSetupsForActiveProfile() {
-  const profileKey = state.profile || 'base'
-  const profileData = state.profiles?.[profileKey] || {}
-  const currentTiers = typeof tiersNow === 'function' ? tiersNow() : (state.tiers || {})
-
-  const pbs = {}
-  Object.values(workflows)
-    .filter((w) => w.kind === 'playbook')
-    .forEach((w) => { pbs[w.key] = w.pb })
-  const playbooksSource = Object.keys(pbs).length ? pbs : (DATA.playbooks || {})
-
-  const topProv = (typeof activeOrder === 'function' ? activeOrder() : [])[0]
-  const leadAgent = mapProviderToCate(topProv) || 'claude-code'
-  const leadTier = 'standard'
-  const leadSpec = resolveModelForTier(leadTier, leadAgent, profileData, currentTiers)
-
-  const setups = []
-
-  for (const [pbKey, pb] of Object.entries(playbooksSource)) {
-    const setupId = slug(`${profileKey}-${pbKey}`)
-    const displayName = getSetupDisplayName(pbKey, pb)
-    const setupName = `${displayName} (${profileKey})`
-    const phases = pb.phases || []
-
-    const nodes = [
-      {
-        id: 'lead',
-        agent: leadAgent,
-        model: leadSpec.model,
-        effort: leadSpec.effort,
-        tier: leadTier,
-        title: 'Orquestrador',
-        orchestrator: true,
-      }
-    ]
-    const edges = []
-    let prevNodeId = 'lead'
-
-    phases.forEach((ph, idx) => {
-      const phId = ph.id || `phase-${idx + 1}`
-      const role = ph.role || phId
-      const mode = ph.readOnly ? 'read-only' : 'write'
-      const tier = ph.tier || 'standard'
-      const agent = resolveAgentForTier(tier, profileData, currentTiers)
-      const spec = resolveModelForTier(tier, agent, profileData, currentTiers)
-      const wt = mode === 'write' ? slug(`${pbKey}-${phId}`) : null
-      const prompt = ph.does || ''
-
-      nodes.push({
-        id: phId,
-        agent,
-        model: spec.model,
-        effort: spec.effort,
-        tier,
-        title: role,
-        mode,
-        worktree: wt,
-        prompt,
-      })
-
-      const roleLower = role.toLowerCase()
-      let kind = 'trigger'
-      if (/checker|reviewer|revisor|verify|audit|gate/.test(roleLower)) {
-        kind = 'verify'
-      } else if (mode === 'read-only' || /scout|planner|research/.test(roleLower)) {
-        kind = 'context'
-      } else {
-        kind = 'trigger'
-      }
-
-      const after = ph.after
-      const fromNode = (after && nodes.some((n) => n.id === after)) ? after : prevNodeId
-      edges.push({
-        from: fromNode,
-        to: phId,
-        kind,
-        label: role,
-      })
-      prevNodeId = phId
-    })
-
-    setups.push({
-      version: 1,
-      id: setupId,
-      name: setupName,
-      displayName,
-      playbookKey: pbKey,
-      source: 'alethe',
-      nodes,
-      edges,
-    })
-  }
-
-  return setups
+  const data = exportData()
+  return profileSetups(state.profile || 'base', data).map(setup => {
+    const playbookKey = Object.keys(data.playbooks).find(key => setup.id === slug(`${state.profile || 'base'}-${key}`))
+    return { ...setup, displayName: setup.name, playbookKey }
+  })
 }
 
 function cleanSetupJson(setup) {

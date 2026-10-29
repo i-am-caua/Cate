@@ -104,7 +104,18 @@ export async function configureHookCli(agentId: AgentId, directory: string, cwd:
         provider: { cate: { npm: '@ai-sdk/openai-compatible', name: 'Cate mock', options: { baseURL: `${mockUrl}/v1`, apiKey: 'cate-fake-key' }, models: { 'cate-mock': { name: 'Cate mock' } } } },
       }))
       return { args: ['--model', 'cate/cate-mock', '--prompt', initialPrompt] }
-    case 'agy':
-      return { args: [initialPrompt] }
+    case 'agy': {
+      env.HOME = path.join(directory, 'agy-home')
+      env.USERPROFILE = env.HOME
+      env.GEMINI_API_KEY = 'cate-fake-key'
+      env.GOOGLE_GEMINI_BASE_URL = mockUrl
+      const settings = { modelProvider: 'gemini', colorScheme: 'dark', altScreenMode: 'always', showTips: false, showFeedbackSurvey: false }
+      const configDir = path.join(env.HOME, '.gemini', 'antigravity-cli')
+      await mkdir(configDir, { recursive: true })
+      await writeFile(path.join(configDir, 'settings.json'), JSON.stringify(settings))
+      await mkdir(path.join(configDir, 'cache'), { recursive: true })
+      await writeFile(path.join(configDir, 'cache', 'onboarding.json'), JSON.stringify({ consumerOnboardingComplete: true, enterpriseOnboardingComplete: false, onboardingComplete: true }))
+      return { args: ['--settings', JSON.stringify(settings), '--add-dir', cwd, '--model', 'gemini-3.8-flash-low', '-i', initialPrompt] }
+    }
   }
 }

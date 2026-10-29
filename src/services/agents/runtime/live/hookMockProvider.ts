@@ -81,6 +81,7 @@ export async function createHookMockProvider(options: {
         try { input = JSON.parse(body || '{}') } catch { res.writeHead(400); res.end(); return }
       }
       const inference = /\/(messages|chat\/completions|responses|generateAssistantResponse|RunSSE)$/.test(route)
+        || /:streamGenerateContent$|:generateContent$/.test(route)
         || req.headers['x-amz-target'] === 'KiroRuntimeService.GenerateAssistantResponse'
       const protocol = String(req.headers['x-amz-target'] ?? route)
       if (inference) {
@@ -100,6 +101,16 @@ export async function createHookMockProvider(options: {
       const model = input.model ?? 'cate-mock'
       const json = (value: unknown) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(value)) }
       const sse = (value: unknown, event?: string) => res.write(`${event ? `event: ${event}\n` : ''}data: ${JSON.stringify(value)}\n\n`)
+      if (/:streamGenerateContent$|:generateContent$/.test(route)) {
+        const parts = call
+          ? [{ functionCall: { name: call.name, args: call.arguments } }]
+          : [{ text: replyText }]
+        const chunk = { candidates: [{ index: 0, content: { role: 'model', parts }, finishReason: 'STOP' }],
+          usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1, totalTokenCount: 2 } }
+        if (route.endsWith(':generateContent')) json(chunk)
+        else { res.writeHead(200, { 'content-type': 'text/event-stream' }); sse(chunk); finish() }
+        return
+      }
       if (route === '/generateAssistantResponse' || req.headers['x-amz-target'] === 'KiroRuntimeService.GenerateAssistantResponse') {
         res.writeHead(200, { 'content-type': 'application/vnd.amazon.eventstream' })
         if (call) {

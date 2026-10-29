@@ -3,23 +3,60 @@
   "id": "base-scout-then-build",
   "name": "Scout, then build (base)",
   "source": "alethe",
+  "description": "Each tier on its usual model.",
   "nodes": [
     {
       "id": "lead",
-      "agent": "agy",
-      "model": "gemini-4-argon-medium",
-      "effort": "medium",
-      "tier": "standard",
-      "title": "Orquestrador (Argon)",
+      "agent": "claude-code",
+      "model": "opus",
+      "effort": "high",
+      "tier": "strong",
+      "title": "Orquestrador",
       "orchestrator": true,
-      "prompt": "Orquestrar as fases do playbook usando Gemini 4 Argon.\n\nName the areas to map and send one scout per area.",
+      "mode": "read-only",
       "worktree": null,
-      "mode": "read-only"
+      "prompt": "Coordinate this playbook using the existing panels identified by setup node id.\nOnly the orchestrator dispatches work, using cate agent send; wait/read replies before deciding the next phase.\nEvaluate if/with branches, gates and first-matching rules; retain limits, then/after, quota and budget policies.\nA rescue phase reuses its assigned panel and session; never start a replacement executor for a continuation.\nConditional phases remain idle until their condition holds. Do not execute every phase as a linear sequence.\nWorker counts are capacity: dispatch only the units that need a phase, including individual rescue follow-ups.\nPanel model/effort are the baseline. If a rule needs a different model, report the required escalation before proceeding.\nWorktrees and read-only modes are requirements to enforce when dispatching, not evidence of sandbox enforcement.\nWorkflow (phase nodes reference the setup ids; map these to the launched panel ids):\n{\"budget\":{\"warnAt\":80,\"whenLow\":\"finish-and-report\"},\"next\":\"review-gate\",\"phases\":[{\"does\":\"Name the areas to map and send one scout per area.\",\"id\":\"brief\",\"nodes\":[\"lead\"],\"readOnly\":true,\"role\":\"planner\",\"tier\":\"strong\",\"who\":\"lead\"},{\"does\":\"One area per scout; keep each slice well under 100K tokens.\",\"gate\":\"The scout reports agree.\",\"id\":\"scout\",\"nodes\":[\"scout-1\",\"scout-2\",\"scout-3\",\"scout-4\"],\"readOnly\":true,\"returns\":\"A summary under 1.5K tokens with file:line pointers.\",\"role\":\"scout\",\"runner\":\"research\",\"tier\":\"cheap\",\"workers\":4},{\"after\":\"scout\",\"does\":\"Settle only the contradiction, from the cited lines.\",\"effort\":\"high\",\"id\":\"settle\",\"if\":\"conflict\",\"nodes\":[\"settle\"],\"readOnly\":true,\"role\":\"checker\",\"runner\":\"economy\",\"then\":\"recheck\",\"tier\":\"standard\"},{\"does\":\"Turn the summaries into one concrete change plan.\",\"id\":\"plan\",\"nodes\":[\"lead\"],\"readOnly\":true,\"role\":\"planner\",\"tier\":\"strong\",\"who\":\"lead\"},{\"does\":\"Implement the plan.\",\"gate\":\"Checks pass.\",\"id\":\"build\",\"nodes\":[\"build\"],\"readOnly\":false,\"returns\":\"Changed files, checks run, failures and risks.\",\"role\":\"builder\",\"runner\":\"economy\",\"tier\":\"standard\"},{\"after\":\"build\",\"does\":\"Fix from the failure excerpt and the diff.\",\"id\":\"fix\",\"if\":\"checks-failed\",\"nodes\":[\"fix\"],\"readOnly\":false,\"role\":\"fixer\",\"runner\":\"economy\",\"then\":\"recheck\",\"tier\":\"strong\"}],\"playbook\":\"scout-then-build\",\"principles\":[\"Do the work yourself when briefing a worker would cost more; delegation always has a floor cost.\",\"Spend the strong tier on decisions and the cheap tier on volume.\",\"Pin every worker's model and effort; a worker without them runs on its CLI's default model, which can be the most expensive one.\",\"Keep your context small; workers return answers, evidence and diffs, never transcripts.\",\"Split by independent unit and no finer; more, narrower briefs raised the bill in Anthropic's own run.\",\"Escalate on a failed check, never on a worker's own claim, one tier at a time and once per unit.\",\"Review a finished diff, never work in progress.\",\"Keep a worker's model and effort fixed for its whole session; switching discards its prompt cache.\",\"Use xhigh only to escalate, and avoid max.\",\"Cap every run with a budget and compare cost per finished task.\",\"Cheap models triage and skip; judging whether code is correct takes the standard tier or above.\",\"A risky unit never runs on the cheap tier, and its diff goes through review-gate.\"],\"profile\":\"base\",\"quota\":{\"criticalThreshold\":80,\"onBothCritical\":\"ask\",\"planEnds\":{},\"spareMinLeft\":30,\"spareWithinHours\":24,\"stopAt\":95,\"whenLow\":\"switch-provider\",\"whenSpare\":\"spend-strong\"}}"
     },
     {
-      "id": "scout",
-      "agent": "agy",
-      "model": "gemini-3.8-flash-low",
+      "id": "scout-1",
+      "agent": "claude-code",
+      "model": "haiku",
+      "effort": "low",
+      "tier": "cheap",
+      "title": "scout",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "One area per scout; keep each slice well under 100K tokens."
+    },
+    {
+      "id": "scout-2",
+      "agent": "claude-code",
+      "model": "haiku",
+      "effort": "low",
+      "tier": "cheap",
+      "title": "scout",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "One area per scout; keep each slice well under 100K tokens."
+    },
+    {
+      "id": "scout-3",
+      "agent": "claude-code",
+      "model": "haiku",
+      "effort": "low",
+      "tier": "cheap",
+      "title": "scout",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "One area per scout; keep each slice well under 100K tokens."
+    },
+    {
+      "id": "scout-4",
+      "agent": "claude-code",
+      "model": "haiku",
       "effort": "low",
       "tier": "cheap",
       "title": "scout",
@@ -30,8 +67,8 @@
     },
     {
       "id": "settle",
-      "agent": "opencode",
-      "model": "opencode/deepseek-v4.1-flash-free",
+      "agent": "claude-code",
+      "model": "sonnet",
       "effort": "high",
       "tier": "standard",
       "title": "checker",
@@ -41,21 +78,9 @@
       "prompt": "Settle only the contradiction, from the cited lines."
     },
     {
-      "id": "plan",
-      "agent": "agy",
-      "model": "gemini-4-argon-high",
-      "effort": "high",
-      "tier": "strong",
-      "title": "planner",
-      "orchestrator": false,
-      "mode": "read-only",
-      "worktree": null,
-      "prompt": "Turn the summaries into one concrete change plan."
-    },
-    {
       "id": "build",
-      "agent": "codex",
-      "model": "gpt-6-luna",
+      "agent": "claude-code",
+      "model": "sonnet",
       "effort": "medium",
       "tier": "standard",
       "title": "builder",
@@ -66,8 +91,8 @@
     },
     {
       "id": "fix",
-      "agent": "codex",
-      "model": "gpt-6-luna",
+      "agent": "claude-code",
+      "model": "opus",
       "effort": "high",
       "tier": "strong",
       "title": "fixer",
@@ -80,36 +105,48 @@
   "edges": [
     {
       "from": "lead",
-      "to": "scout",
+      "to": "scout-1",
       "kind": "context",
       "label": "scout"
     },
     {
-      "from": "scout",
+      "from": "lead",
+      "to": "scout-2",
+      "kind": "context",
+      "label": "scout"
+    },
+    {
+      "from": "lead",
+      "to": "scout-3",
+      "kind": "context",
+      "label": "scout"
+    },
+    {
+      "from": "lead",
+      "to": "scout-4",
+      "kind": "context",
+      "label": "scout"
+    },
+    {
+      "from": "lead",
       "to": "settle",
-      "kind": "verify",
+      "kind": "context",
       "label": "checker"
     },
     {
-      "from": "settle",
-      "to": "plan",
-      "kind": "context",
-      "label": "planner"
-    },
-    {
-      "from": "plan",
+      "from": "lead",
       "to": "build",
       "kind": "trigger",
       "label": "builder"
     },
     {
-      "from": "build",
+      "from": "lead",
       "to": "fix",
       "kind": "trigger",
       "label": "fixer"
     }
   ],
   "budget": {
-    "maxWorkers": 6
+    "maxWorkers": 8
   }
 }

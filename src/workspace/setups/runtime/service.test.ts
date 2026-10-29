@@ -163,8 +163,12 @@ describe('setup runtime', () => {
 
     await service.apply({ id: 'team-flow', orchestratorPrompt: '  Refactor auth  ' })
 
-    expect(startAgent.mock.calls[0]?.[0]).toMatchObject({ prompt: 'Refactor auth' })
-    expect(startAgent.mock.calls[1]?.[0]).not.toHaveProperty('prompt')
+    expect(startAgent.mock.calls[0]?.[0]).not.toHaveProperty('prompt')
+    expect(startAgent.mock.calls[1]?.[0].prompt).toContain('Task:\nRefactor auth')
+    expect(startAgent.mock.calls[1]?.[0].prompt).toContain('Setup panels (node id → panel id):')
+    expect(startAgent.mock.calls[1]?.[0].prompt).toContain('Role worker (Worker): Implement the feature')
+    expect(startAgent.mock.calls[1]?.[0].prompt).toContain('Coordinate the work')
+    expect(startAgent.mock.calls[1]?.[0].prompt).toContain('{"worker":"panel-1"}')
   })
 
   it('keeps going when one agent fails and reports the warning', async () => {
@@ -180,6 +184,21 @@ describe('setup runtime', () => {
     expect(result.panelIds).toEqual({ lead: 'panel-1' })
     expect(result.relationIds).toEqual([])
     expect(result.warnings).toEqual(['Worker: hooks not ready'])
+  })
+
+  it('tells the tasked orchestrator which workers failed to start', async () => {
+    const failing = vi.fn(async (args: SetupStartArgs) => {
+      if (args.title === 'Worker') throw new Error('hooks not ready')
+      return { panelId: 'lead-panel' }
+    })
+    const service = runtime({ startAgent: failing })
+    await service.save(team)
+
+    const result = await service.apply({ id: 'team-flow', orchestratorPrompt: 'Implement a feature' })
+
+    expect(result.panelIds).toEqual({ lead: 'lead-panel' })
+    expect(failing.mock.calls.at(-1)?.[0].prompt).toContain('Setup warnings: Worker: hooks not ready')
+    expect(failing.mock.calls.at(-1)?.[0].prompt).toContain('Setup panels (node id → panel id):\n{}')
   })
 
   it('refuses to apply without a canvas', async () => {

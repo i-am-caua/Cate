@@ -3,23 +3,24 @@
   "id": "base-cascade",
   "name": "Cascade (base)",
   "source": "alethe",
+  "description": "Each tier on its usual model.",
   "nodes": [
     {
       "id": "lead",
-      "agent": "agy",
-      "model": "gemini-4-argon-medium",
+      "agent": "claude-code",
+      "model": "sonnet",
       "effort": "medium",
       "tier": "standard",
-      "title": "Orquestrador (Argon)",
+      "title": "Orquestrador",
       "orchestrator": true,
-      "prompt": "Orquestrar as fases do playbook usando Gemini 4 Argon.\n\nBrief the cheap attempt and name the automatic check that decides.",
+      "mode": "read-only",
       "worktree": null,
-      "mode": "read-only"
+      "prompt": "Coordinate this playbook using the existing panels identified by setup node id.\nOnly the orchestrator dispatches work, using cate agent send; wait/read replies before deciding the next phase.\nEvaluate if/with branches, gates and first-matching rules; retain limits, then/after, quota and budget policies.\nA rescue phase reuses its assigned panel and session; never start a replacement executor for a continuation.\nConditional phases remain idle until their condition holds. Do not execute every phase as a linear sequence.\nWorker counts are capacity: dispatch only the units that need a phase, including individual rescue follow-ups.\nPanel model/effort are the baseline. If a rule needs a different model, report the required escalation before proceeding.\nWorktrees and read-only modes are requirements to enforce when dispatching, not evidence of sandbox enforcement.\nWorkflow (phase nodes reference the setup ids; map these to the launched panel ids):\n{\"budget\":{\"warnAt\":80,\"whenLow\":\"finish-and-report\"},\"next\":\"review-gate\",\"phases\":[{\"does\":\"Brief the cheap attempt and name the automatic check that decides.\",\"id\":\"brief\",\"nodes\":[\"lead\"],\"readOnly\":true,\"role\":\"planner\",\"tier\":\"standard\",\"who\":\"lead\"},{\"does\":\"Make the change and run the check.\",\"gate\":\"The automatic check passes.\",\"id\":\"try-cheap\",\"nodes\":[\"try-cheap\"],\"readOnly\":false,\"role\":\"attempt\",\"runner\":\"economy\",\"tier\":\"cheap\"},{\"after\":\"try-cheap\",\"does\":\"Start fresh from the failure excerpt, not from the cheap attempt's transcript.\",\"gate\":\"The automatic check passes.\",\"id\":\"try-standard\",\"if\":\"checks-failed\",\"nodes\":[\"try-standard\"],\"readOnly\":false,\"role\":\"attempt\",\"runner\":\"economy\",\"tier\":\"standard\"},{\"after\":\"try-standard\",\"does\":\"One last attempt with both failure excerpts; report the result either way.\",\"id\":\"try-strong\",\"if\":\"checks-failed\",\"nodes\":[\"try-strong\"],\"readOnly\":false,\"role\":\"attempt\",\"rules\":[{\"if\":\"budget-low\",\"use\":{\"effort\":\"high\",\"tier\":\"standard\"}}],\"runner\":\"economy\",\"then\":\"done\",\"tier\":\"strong\"}],\"playbook\":\"cascade\",\"principles\":[\"Do the work yourself when briefing a worker would cost more; delegation always has a floor cost.\",\"Spend the strong tier on decisions and the cheap tier on volume.\",\"Pin every worker's model and effort; a worker without them runs on its CLI's default model, which can be the most expensive one.\",\"Keep your context small; workers return answers, evidence and diffs, never transcripts.\",\"Split by independent unit and no finer; more, narrower briefs raised the bill in Anthropic's own run.\",\"Escalate on a failed check, never on a worker's own claim, one tier at a time and once per unit.\",\"Review a finished diff, never work in progress.\",\"Keep a worker's model and effort fixed for its whole session; switching discards its prompt cache.\",\"Use xhigh only to escalate, and avoid max.\",\"Cap every run with a budget and compare cost per finished task.\",\"Cheap models triage and skip; judging whether code is correct takes the standard tier or above.\",\"A risky unit never runs on the cheap tier, and its diff goes through review-gate.\"],\"profile\":\"base\",\"quota\":{\"criticalThreshold\":80,\"onBothCritical\":\"ask\",\"planEnds\":{},\"spareMinLeft\":30,\"spareWithinHours\":24,\"stopAt\":95,\"whenLow\":\"switch-provider\",\"whenSpare\":\"spend-strong\"}}"
     },
     {
       "id": "try-cheap",
-      "agent": "agy",
-      "model": "gemini-3.8-flash-low",
+      "agent": "claude-code",
+      "model": "haiku",
       "effort": "low",
       "tier": "cheap",
       "title": "attempt",
@@ -30,8 +31,8 @@
     },
     {
       "id": "try-standard",
-      "agent": "agy",
-      "model": "gemini-4-argon-medium",
+      "agent": "claude-code",
+      "model": "sonnet",
       "effort": "medium",
       "tier": "standard",
       "title": "attempt",
@@ -42,8 +43,8 @@
     },
     {
       "id": "try-strong",
-      "agent": "agy",
-      "model": "gemini-4-argon-high",
+      "agent": "claude-code",
+      "model": "opus",
       "effort": "high",
       "tier": "strong",
       "title": "attempt",
@@ -61,13 +62,13 @@
       "label": "attempt"
     },
     {
-      "from": "try-cheap",
+      "from": "lead",
       "to": "try-standard",
       "kind": "trigger",
       "label": "attempt"
     },
     {
-      "from": "try-standard",
+      "from": "lead",
       "to": "try-strong",
       "kind": "trigger",
       "label": "attempt"

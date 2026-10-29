@@ -3,23 +3,24 @@
   "id": "base-advisor-escalation",
   "name": "Advisor on call (base)",
   "source": "alethe",
+  "description": "Each tier on its usual model.",
   "nodes": [
     {
       "id": "lead",
-      "agent": "agy",
-      "model": "gemini-4-argon-medium",
-      "effort": "medium",
-      "tier": "standard",
-      "title": "Orquestrador (Argon)",
+      "agent": "claude-code",
+      "model": "opus",
+      "effort": "high",
+      "tier": "strong",
+      "title": "Orquestrador",
       "orchestrator": true,
-      "prompt": "Orquestrar as fases do playbook usando Gemini 4 Argon.\n\nHand the task to one executor and name the decisions it must stop at.",
+      "mode": "read-only",
       "worktree": null,
-      "mode": "read-only"
+      "prompt": "Coordinate this playbook using the existing panels identified by setup node id.\nOnly the orchestrator dispatches work, using cate agent send; wait/read replies before deciding the next phase.\nEvaluate if/with branches, gates and first-matching rules; retain limits, then/after, quota and budget policies.\nA rescue phase reuses its assigned panel and session; never start a replacement executor for a continuation.\nConditional phases remain idle until their condition holds. Do not execute every phase as a linear sequence.\nWorker counts are capacity: dispatch only the units that need a phase, including individual rescue follow-ups.\nPanel model/effort are the baseline. If a rule needs a different model, report the required escalation before proceeding.\nWorktrees and read-only modes are requirements to enforce when dispatching, not evidence of sandbox enforcement.\nWorkflow (phase nodes reference the setup ids; map these to the launched panel ids):\n{\"budget\":{\"warnAt\":80,\"whenLow\":\"finish-and-report\"},\"next\":\"review-gate\",\"phases\":[{\"does\":\"Hand the task to one executor and name the decisions it must stop at.\",\"id\":\"brief\",\"nodes\":[\"lead\"],\"readOnly\":true,\"role\":\"planner\",\"tier\":\"strong\",\"who\":\"lead\"},{\"does\":\"Work until done, stuck, or about to make a hard-to-reverse decision; then stop with a status under 1K tokens.\",\"gate\":\"Done and checks pass.\",\"id\":\"execute\",\"nodes\":[\"execute\"],\"readOnly\":false,\"returns\":\"The status, the decision needed and the options considered.\",\"role\":\"executor\",\"runner\":\"economy\",\"tier\":\"standard\"},{\"after\":\"execute\",\"does\":\"Read only the status and the cited files, then answer the decision.\",\"id\":\"advise\",\"if\":\"stuck\",\"limit\":\"At most 3 consults per task.\",\"nodes\":[\"advise\"],\"readOnly\":true,\"role\":\"advisor\",\"rules\":[{\"if\":\"claude-low\",\"use\":{\"effort\":\"xhigh\",\"provider\":\"codex\"}}],\"runner\":\"economy\",\"tier\":\"strong\"},{\"after\":\"advise\",\"does\":\"Resume the executor's session with the advice.\",\"id\":\"resume\",\"nodes\":[\"execute\"],\"readOnly\":false,\"role\":\"executor\",\"runner\":\"rescue\",\"then\":\"recheck\",\"tier\":\"standard\"}],\"playbook\":\"advisor-escalation\",\"principles\":[\"Do the work yourself when briefing a worker would cost more; delegation always has a floor cost.\",\"Spend the strong tier on decisions and the cheap tier on volume.\",\"Pin every worker's model and effort; a worker without them runs on its CLI's default model, which can be the most expensive one.\",\"Keep your context small; workers return answers, evidence and diffs, never transcripts.\",\"Split by independent unit and no finer; more, narrower briefs raised the bill in Anthropic's own run.\",\"Escalate on a failed check, never on a worker's own claim, one tier at a time and once per unit.\",\"Review a finished diff, never work in progress.\",\"Keep a worker's model and effort fixed for its whole session; switching discards its prompt cache.\",\"Use xhigh only to escalate, and avoid max.\",\"Cap every run with a budget and compare cost per finished task.\",\"Cheap models triage and skip; judging whether code is correct takes the standard tier or above.\",\"A risky unit never runs on the cheap tier, and its diff goes through review-gate.\"],\"profile\":\"base\",\"quota\":{\"criticalThreshold\":80,\"onBothCritical\":\"ask\",\"planEnds\":{},\"spareMinLeft\":30,\"spareWithinHours\":24,\"stopAt\":95,\"whenLow\":\"switch-provider\",\"whenSpare\":\"spend-strong\"}}"
     },
     {
       "id": "execute",
-      "agent": "agy",
-      "model": "gemini-4-argon-medium",
+      "agent": "claude-code",
+      "model": "sonnet",
       "effort": "medium",
       "tier": "standard",
       "title": "executor",
@@ -30,8 +31,8 @@
     },
     {
       "id": "advise",
-      "agent": "agy",
-      "model": "gemini-4-argon-high",
+      "agent": "claude-code",
+      "model": "opus",
       "effort": "high",
       "tier": "strong",
       "title": "advisor",
@@ -39,18 +40,6 @@
       "mode": "read-only",
       "worktree": null,
       "prompt": "Read only the status and the cited files, then answer the decision."
-    },
-    {
-      "id": "resume",
-      "agent": "agy",
-      "model": "gemini-4-argon-medium",
-      "effort": "medium",
-      "tier": "standard",
-      "title": "executor",
-      "orchestrator": false,
-      "mode": "write",
-      "worktree": null,
-      "prompt": "Resume the executor's session with the advice."
     }
   ],
   "edges": [
@@ -61,19 +50,13 @@
       "label": "executor"
     },
     {
-      "from": "execute",
+      "from": "lead",
       "to": "advise",
       "kind": "context",
       "label": "advisor"
-    },
-    {
-      "from": "advise",
-      "to": "resume",
-      "kind": "trigger",
-      "label": "executor"
     }
   ],
   "budget": {
-    "maxWorkers": 4
+    "maxWorkers": 3
   }
 }

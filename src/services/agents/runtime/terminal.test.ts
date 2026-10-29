@@ -359,8 +359,8 @@ const TOOL_POSTS: Record<AgentId, { edit: (file: string) => Record<string, unkno
     shell: (command) => ({ type: 'message.part.updated', sessionID: 's', part: { type: 'tool', tool: 'bash', callID: 'b', state: { status: 'completed', input: { command, description: 'Run it' }, metadata: {} } } }),
   },
   agy: {
-    edit: (file) => ({ hook_event_name: 'postToolUse', session_id: 's', tool_use_id: 'e', tool_name: 'write_file', tool_input: { Path: file, Content: 'after\n' }, tool_response: {} }),
-    shell: (command) => ({ hook_event_name: 'postToolUse', session_id: 's', tool_use_id: 'b', tool_name: 'run_command', tool_input: { CommandLine: command }, tool_response: {} }),
+    edit: (file) => ({ hook_event_name: 'PostToolUse', conversationId: 's', stepIdx: 1, toolCall: { name: 'write_file', args: { Path: file, Content: 'after\n' } } }),
+    shell: (command) => ({ hook_event_name: 'PostToolUse', conversationId: 's', stepIdx: 2, toolCall: { name: 'run_command', args: { CommandLine: command } } }),
   },
 }
 
@@ -473,6 +473,7 @@ describe('terminal agentTerminals input and hook ordering', () => {
     // These CLIs have no permission-wait hook. Input must preserve their running state.
     { agentId: 'cursor', start: { hook_event_name: 'beforeSubmitPrompt' }, wait: null },
     { agentId: 'kiro', start: { hook_event_name: 'UserPromptSubmit' }, wait: null },
+    { agentId: 'agy', start: { hook_event_name: 'PreInvocation' }, wait: null },
   ] as const
   const ids = { session_id: 'session', sessionId: 'session', sessionID: 'session' }
   const status = () => agents.panels.state('term')?.status
