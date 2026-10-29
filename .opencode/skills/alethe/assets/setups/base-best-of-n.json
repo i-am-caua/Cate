@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "id": "base-best-of-n",
+  "name": "Best of N (base)",
+  "source": "alethe",
+  "description": "Each tier on its usual model.",
+  "nodes": [
+    {
+      "id": "lead",
+      "agent": "claude-code",
+      "model": "opus",
+      "effort": "high",
+      "tier": "strong",
+      "title": "Orquestrador",
+      "orchestrator": true,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "Coordinate this playbook using the existing panels identified by setup node id.\nOnly the orchestrator dispatches work, using cate agent send; wait/read replies before deciding the next phase.\nEvaluate if/with branches, gates and first-matching rules; retain limits, then/after, quota and budget policies.\nA rescue phase reuses its assigned panel and session; never start a replacement executor for a continuation.\nConditional phases remain idle until their condition holds. Do not execute every phase as a linear sequence.\nWorker counts are capacity: dispatch only the units that need a phase, including individual rescue follow-ups.\nPanel model/effort are the baseline. If a rule needs a different model, report the required escalation before proceeding.\nWorktrees and read-only modes are requirements to enforce when dispatching, not evidence of sandbox enforcement.\nWorkflow (phase nodes reference the setup ids; map these to the launched panel ids):\n{\"budget\":{\"warnAt\":80,\"whenLow\":\"finish-and-report\"},\"next\":\"review-gate\",\"phases\":[{\"does\":\"Write one brief and hand it to 2 or 3 isolated attempts.\",\"id\":\"brief\",\"nodes\":[\"lead\"],\"readOnly\":true,\"role\":\"planner\",\"tier\":\"strong\",\"who\":\"lead\"},{\"does\":\"2 or 3 independent attempts; mix Claude and Codex when both are installed.\",\"gate\":\"At least one attempt passes the tests.\",\"id\":\"attempts\",\"isolate\":true,\"nodes\":[\"attempts-1\",\"attempts-2\",\"attempts-3\"],\"readOnly\":false,\"returns\":\"Diff and test results.\",\"role\":\"attempt\",\"runner\":\"parallel\",\"tier\":\"standard\",\"workers\":3},{\"after\":\"attempts\",\"does\":\"One attempt that starts from the failure summaries.\",\"id\":\"strong-attempt\",\"if\":\"no-pass\",\"nodes\":[\"strong-attempt\"],\"readOnly\":false,\"role\":\"attempt\",\"runner\":\"economy\",\"then\":\"recheck\",\"tier\":\"strong\"},{\"does\":\"Compare the passing diffs and pick one.\",\"id\":\"judge\",\"nodes\":[\"judge\"],\"readOnly\":true,\"returns\":\"The chosen attempt and why.\",\"role\":\"judge\",\"runner\":\"economy\",\"tier\":\"strong\"}],\"playbook\":\"best-of-n\",\"principles\":[\"Do the work yourself when briefing a worker would cost more; delegation always has a floor cost.\",\"Spend the strong tier on decisions and the cheap tier on volume.\",\"Pin every worker's model and effort; a worker without them runs on its CLI's default model, which can be the most expensive one.\",\"Keep your context small; workers return answers, evidence and diffs, never transcripts.\",\"Split by independent unit and no finer; more, narrower briefs raised the bill in Anthropic's own run.\",\"Escalate on a failed check, never on a worker's own claim, one tier at a time and once per unit.\",\"Review a finished diff, never work in progress.\",\"Keep a worker's model and effort fixed for its whole session; switching discards its prompt cache.\",\"Use xhigh only to escalate, and avoid max.\",\"Cap every run with a budget and compare cost per finished task.\",\"Cheap models triage and skip; judging whether code is correct takes the standard tier or above.\",\"A risky unit never runs on the cheap tier, and its diff goes through review-gate.\"],\"profile\":\"base\",\"quota\":{\"criticalThreshold\":80,\"onBothCritical\":\"ask\",\"planEnds\":{},\"spareMinLeft\":30,\"spareWithinHours\":24,\"stopAt\":95,\"whenLow\":\"switch-provider\",\"whenSpare\":\"spend-strong\"}}"
+    },
+    {
+      "id": "attempts-1",
+      "agent": "claude-code",
+      "model": "sonnet",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "attempt",
+      "orchestrator": false,
+      "mode": "write",
+      "worktree": "best-of-n-attempts-1",
+      "prompt": "2 or 3 independent attempts; mix Claude and Codex when both are installed."
+    },
+    {
+      "id": "attempts-2",
+      "agent": "claude-code",
+      "model": "sonnet",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "attempt",
+      "orchestrator": false,
+      "mode": "write",
+      "worktree": "best-of-n-attempts-2",
+      "prompt": "2 or 3 independent attempts; mix Claude and Codex when both are installed."
+    },
+    {
+      "id": "attempts-3",
+      "agent": "claude-code",
+      "model": "sonnet",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "attempt",
+      "orchestrator": false,
+      "mode": "write",
+      "worktree": "best-of-n-attempts-3",
+      "prompt": "2 or 3 independent attempts; mix Claude and Codex when both are installed."
+    },
+    {
+      "id": "strong-attempt",
+      "agent": "claude-code",
+      "model": "opus",
+      "effort": "high",
+      "tier": "strong",
+      "title": "attempt",
+      "orchestrator": false,
+      "mode": "write",
+      "worktree": null,
+      "prompt": "One attempt that starts from the failure summaries."
+    },
+    {
+      "id": "judge",
+      "agent": "claude-code",
+      "model": "opus",
+      "effort": "high",
+      "tier": "strong",
+      "title": "judge",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "Compare the passing diffs and pick one."
+    }
+  ],
+  "edges": [
+    {
+      "from": "lead",
+      "to": "attempts-1",
+      "kind": "trigger",
+      "label": "attempt"
+    },
+    {
+      "from": "lead",
+      "to": "attempts-2",
+      "kind": "trigger",
+      "label": "attempt"
+    },
+    {
+      "from": "lead",
+      "to": "attempts-3",
+      "kind": "trigger",
+      "label": "attempt"
+    },
+    {
+      "from": "lead",
+      "to": "strong-attempt",
+      "kind": "trigger",
+      "label": "attempt"
+    },
+    {
+      "from": "lead",
+      "to": "judge",
+      "kind": "context",
+      "label": "judge"
+    }
+  ],
+  "budget": {
+    "maxWorkers": 6
+  }
+}

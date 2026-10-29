@@ -2,8 +2,9 @@
 // client layer): the repository host for the shown workspace and the file
 // views host. Opening a review is the review panel's: the shell installs it.
 
-import { useMemo, type ReactNode } from 'react'
-import { tryRuntimeFor } from '@kernel/rpc/client'
+import { useEffect, useMemo, type ReactNode } from 'react'
+import { clientUi } from '@kernel/interaction'
+import { subscribeRuntimes, tryRuntimeFor } from '@kernel/rpc/client'
 import { isIconName } from '@kernel/interaction/contract'
 import { documentStoreFor } from '@client/document'
 import { useDocument } from '../../client/document'
@@ -16,6 +17,7 @@ import { RepositoryUiProvider } from '../../workspace/repository'
 import { FileViewsContext } from '../../workspace/files'
 import type { PanelRecord, WorktreeMeta } from '@workspace/document/contract'
 import { fileViewsHost } from './fileActions'
+import type { FileAccessRequest } from '@workspace/files/contract'
 
 /** Opens (or reuses) a review panel for a comparison. */
 export type ReviewOpener = (request: ReviewRequest & { workspaceId: string }) => Promise<unknown>
@@ -93,9 +95,60 @@ export function FileViewsHost({ children }: { children: ReactNode }) {
   return <FileViewsContext.Provider value={fileViewsHost}>{children}</FileViewsContext.Provider>
 }
 
+function FileAccessPrompts({ workspaceId }: { workspaceId: string }): null {
+  useEffect(() => {
+    let stopStream = () => {}
+    let attachedRuntime: ReturnType<typeof tryRuntimeFor> = null
+    let promptQueue = Promise.resolve()
+    const attach = () => {
+      const runtime = tryRuntimeFor(workspaceId)
+      if (runtime === attachedRuntime) return
+      stopStream()
+      attachedRuntime = runtime
+      if (!runtime) return
+
+      let active = true
+      const stream = runtime.file.accessRequests(undefined, { resume: true })
+      stream.onEvent((request: FileAccessRequest) => {
+        promptQueue = promptQueue.then(async () => {
+          if (!active) return
+          const operation = request.operation === 'read' ? 'read' : request.operation === 'write' ? 'write to' : 'browse'
+          const message = request.grantPath === request.path
+            ? `Allow Cate to ${operation} this path?\n\n${request.path}\n\nApproval is remembered for this workspace.`
+            : `Allow Cate to ${operation} this path?\n\n${request.path}\n\nApproval also covers this folder and its contents:\n${request.grantPath}`
+          const ui = clientUi()
+          const allow = ui.confirmFileAccess
+            ? await ui.confirmFileAccess(request)
+            : await ui.confirm(message)
+          if (active) await runtime.file.resolveAccessRequest({ requestId: request.id, allow })
+        }).catch(() => { /* the request expires if the runtime disconnects */ })
+      })
+      stream.done.catch(() => {})
+      stopStream = () => {
+        active = false
+        stream.cancel()
+      }
+    }
+
+    const unsubscribe = subscribeRuntimes(attach)
+    attach()
+    return () => {
+      unsubscribe()
+      stopStream()
+    }
+  }, [workspaceId])
+  return null
+}
+
+export function WorkspaceFileAccessPrompts({ workspaceIds }: { workspaceIds: readonly string[] }): JSX.Element {
+  return <>{workspaceIds.map((id) => <FileAccessPrompts key={id} workspaceId={id} />)}</>
+}
+
 /** The workspace contexts around a window's content: the repository host
  *  (with a shown workspace) and the file views host. */
 export function WorkspaceScope({ workspaceId, children }: { workspaceId: string | null; children: ReactNode }) {
   const content = <FileViewsHost>{children}</FileViewsHost>
-  return workspaceId ? <RepositoryHost key={workspaceId} workspaceId={workspaceId}>{content}</RepositoryHost> : content
+  return workspaceId
+    ? <RepositoryHost key={workspaceId} workspaceId={workspaceId}>{content}</RepositoryHost>
+    : content
 }

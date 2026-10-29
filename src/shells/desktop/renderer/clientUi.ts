@@ -5,6 +5,7 @@
 
 import type { ClientFeature } from '@kernel/rpc/contract'
 import type { ClientUi } from '@kernel/interaction/contract'
+import type { FileAccessRequest } from '@workspace/files/contract'
 import { useUIStore } from '../ui/app'
 import { showSavePathDialog } from '../ui/workspace/files'
 import type { DesktopApi, MessageBoxRequest } from '../contract'
@@ -20,6 +21,20 @@ export function createDesktopClientUi(api: DesktopApi, features: readonly Client
     openSettings: (section) => useUIStore.getState().openSettings(section || undefined),
     async confirm(message) {
       return (await ask({ type: 'question', message, buttons: ['OK', 'Cancel'], defaultId: 0, cancelId: 1 })) === 0
+    },
+    async confirmFileAccess({ path, grantPath, operation }) {
+      const action = operation === 'read' ? 'read this path' : operation === 'write' ? 'write to this path' : 'browse this folder'
+      const detail = grantPath === path
+        ? `${path}\n\nIf you allow it, this path will be remembered for this workspace. You can revoke it in Settings â†’ Files.`
+        : `${path}\n\nAllowing this will also remember the folder and its contents:\n${grantPath}\n\nYou can revoke it in Settings â†’ Files.`
+      return (await ask({
+        type: 'question',
+        message: `Allow Cate to ${action}?`,
+        detail,
+        buttons: ['Allow', 'Deny'],
+        defaultId: 1,
+        cancelId: 1,
+      })) === 0
     },
     showError(message) {
       void ask({ type: 'error', message, buttons: ['OK'] })

@@ -4,7 +4,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { writeFileAtomic } from '@kernel/state/node'
-import type { FileEntry, FileSearchResult, FileStat } from '../contract'
+import { pathHasPrefix, pathKey, type FileEntry, type FileSearchResult, type FileStat } from '../contract'
 
 /** Refuses to write through a symlink: validation resolves the parent chain
  *  only, so an existing symlink basename would redirect the write. */
@@ -77,6 +77,7 @@ export async function searchFileNames(
   query: string,
   exclusions: ReadonlySet<string>,
   maxResults = 200,
+  excludedPaths: readonly string[] = [],
 ): Promise<FileSearchResult[]> {
   const lowerQuery = query.toLowerCase()
   const allowDotFiles = query.startsWith('.')
@@ -95,6 +96,7 @@ export async function searchFileNames(
       if (exclusions.has(name)) continue
       if (!allowDotFiles && name.startsWith('.')) continue
       const full = path.join(dir, name)
+      if (excludedPaths.some((excluded) => pathHasPrefix(pathKey(full), pathKey(excluded)))) continue
       const stat = await fs.lstat(full).catch(() => null)
       if (!stat || stat.isSymbolicLink()) continue
       const isDirectory = stat.isDirectory()

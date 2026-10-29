@@ -12,6 +12,7 @@ import { repositorySettings } from '@workspace/repository/contract/settings'
 import { notificationSettings } from '@workspace/notifications/contract/settings'
 import { terminalClientSettings, terminalSettings } from '@services/terminal/contract/settings'
 import { browserClientSettings, browserSettings } from '@services/browser/contract/settings'
+import { filesSettings } from '@workspace/files/contract/settings'
 import { agentSettings } from '@services/agents/contract/settings'
 import { editorSettings } from '@panels/editor/contract/settings'
 import { reviewSettings } from '@panels/review/contract/settings'
@@ -29,6 +30,7 @@ export const SHARED_SETTINGS_SLICES = [
   terminalSettings,
   browserClientSettings,
   browserSettings,
+  filesSettings,
   agentSettings,
   editorSettings,
   reviewSettings,

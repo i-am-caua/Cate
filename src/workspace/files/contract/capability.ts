@@ -1,5 +1,6 @@
 import { defineCapability, method, stream } from '@kernel/rpc/contract'
 import type { BufferResolution, BufferState, BufferStreamEvent } from './buffer'
+import type { FileAccessRequest } from './access'
 import type {
   FileEntry,
   FileSearchResult,
@@ -13,12 +14,10 @@ import type {
   SearchOptions,
 } from './types'
 
-/** Files of the workspace: the root, its worktree checkouts, granted paths
- *  and, read-only, the workspace data's `screenshots/` and
- *  `browser/downloads/` (filled by `storeScreenshot` and `storeDownload`).
- *  Anything else, the rest of the workspace data included, fails with
- *  `rejected`. Files brought in (`rename`, `copy`, `importEntries`, `tempDir`) land only
- *  inside a checkout; another destination fails with `rejected`.
+/** Files of the workspace: its root, worktree checkouts, approved paths, and
+ *  paths admitted by its file-access setting. Cate's private workspace data
+ *  stays unavailable. `tempDir` and `storeDownload`/`storeScreenshot` retain
+ *  their dedicated workspace locations.
  *  Served while the workspace is untrusted (9.2). */
 export const fileCapability = defineCapability('file', {
   methods: {
@@ -36,9 +35,14 @@ export const fileCapability = defineCapability('file', {
     mkdir: method<{ path: string }, void>({ mutates: true }),
     /** Copies into `destDir`, picking a free name ("a copy.txt", "a (2).txt"). */
     copy: method<{ path: string; destDir: string }, { path: string }>({ mutates: true }),
-    /** Grants access to a path outside the workspace the user picked in a
-     *  dialog. Persisted in the workspace data. */
+    /** Grants access to a path outside the workspace. Persisted in workspace data. */
     grant: method<{ path: string }, { path: string }>({ mutates: true }),
+    /** The grants for external paths in this workspace. */
+    grants: method<void, string[]>(),
+    /** Revokes an external path grant. */
+    revokeGrant: method<{ path: string }, void>({ mutates: true }),
+    /** Answers a pending request from a file operation in this workspace. */
+    resolveAccessRequest: method<{ requestId: string; allow: boolean }, void>({ mutates: true }),
     /** The temporary folder (`.cate/tmp`, see `cateTempDir`) of the checkout
      *  holding `near` (the workspace root or a worktree checkout; the root
      *  when omitted), created with the `.cate/.gitignore` if missing. */
@@ -51,6 +55,8 @@ export const fileCapability = defineCapability('file', {
     resolveBuffer: method<{ path: string; resolution: BufferResolution }, BufferState>({ mutates: true }),
   },
   streams: {
+    /** External path accesses waiting for this client to ask the person. */
+    accessRequests: stream<void, FileAccessRequest>(),
     readBinary: stream<{ path: string }, never, { size: number; hash: string }>({ bytes: true }),
     /** The client writes exactly `size` bytes; the stream ends once written. */
     writeBinary: stream<{ path: string; size: number; baseHash?: string | null }, never, { path: string; hash: string }>(),

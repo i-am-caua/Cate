@@ -114,7 +114,13 @@ export function composeWorkspace(deps: WorkspaceDeps) {
   // ---- Workspace --------------------------------------------------------------
 
   const trust = createTrustGate({ file: paths.trust })
-  const files = createFilesRuntime({ root, dataPaths: paths, trust, log: log.child('files') })
+  const files = createFilesRuntime({
+    root,
+    dataPaths: paths,
+    trust,
+    fileAccessMode: () => settings.get('fileAccessMode'),
+    log: log.child('files'),
+  })
   const document = createDocumentService({ file: paths.document, log: log.child('document') })
   const presence = createPresence({ lifecycle: deps.lifecycle })
   const prepareCateDir = (cateDir: string) => ensureCateGitignore(path.dirname(cateDir))
@@ -232,7 +238,7 @@ export function composeWorkspace(deps: WorkspaceDeps) {
     },
     log: log.child('terminal'),
     env: baseEnv,
-    resolveCwd: (cwd) => files.paths.cwd(cwd),
+    resolveCwd: (cwd) => files.paths.strict(cwd, 'browse'),
     // Background cadence while no connected client has the person's attention.
     attended: () => presence.clients().some((client) => client.attentive),
     ...(deps.countPerf ? { countPerf: deps.countPerf } : {}),

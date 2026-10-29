@@ -17,6 +17,7 @@ export function buildRipgrepArgs(
   opts: SearchOptions,
   rootPath: string,
   extraExcludes: string[] = [],
+  alwaysExcludes: string[] = [],
 ): string[] {
   const args: string[] = [
     '--json',        // structured, streamable output
@@ -58,6 +59,9 @@ export function buildRipgrepArgs(
     for (const name of extraExcludes) {
       if (name) args.push('--glob', `!${name}`)
     }
+  }
+  for (const pattern of alwaysExcludes) {
+    if (pattern) args.push('--glob', `!${pattern}`)
   }
   // Always skip the VCS internals dir: never useful to search and, with
   // --hidden, ripgrep would otherwise descend into it.

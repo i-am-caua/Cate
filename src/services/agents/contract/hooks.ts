@@ -818,15 +818,35 @@ async function dispatchEvent(event) {
     }),
   }).catch(() => {})
 }
-export const CateHookBridge = async () => {
-  if (!ENDPOINT || !TOKEN) return {}
-  return {
-    "experimental.chat.system.transform": async (_input, output) => {
-      const context = await promptContext()
-      if (context) output.system.push(context)
-    },
-    event: async ({ event }) => dispatchEvent(event),
-  }
+export default {
+  id: "cate-hook",
+  event: async ({ event }) => dispatchEvent(event),
+  async setup(ctx) {
+    if (!ENDPOINT || !TOKEN) return () => {}
+    if (ctx?.session?.hook) {
+      const inject = async (output) => {
+        const context = await promptContext()
+        if (!context || !output?.system) return
+        const item = Array.isArray(output.system) && output.system.length > 0 && typeof output.system[0] === "string"
+          ? context
+          : { type: "text", text: context }
+        output.system.push(item)
+      }
+      ctx.session.hook("context", inject)
+      ctx.session.hook("compaction", inject)
+      ctx.session.hook("generate", inject)
+    }
+    if (ctx?.event?.subscribe) {
+      (async () => {
+        try {
+          for await (const event of ctx.event.subscribe()) {
+            dispatchEvent(event)
+          }
+        } catch {}
+      })()
+    }
+    return () => {}
+  },
 }
 
 `

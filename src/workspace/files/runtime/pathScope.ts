@@ -1,10 +1,6 @@
-// The path scope of one workspace runtime (architecture 7.1): every path a
-// capability touches must lie in the workspace root, one of its worktree
-// checkouts, a granted path, or the two folders of the workspace data clients
-// read (`screenshots/`, `browser/downloads/`). Those are read-only through the
-// scope: the runtime writes its own files there directly, and the rest of the
-// workspace data (secrets, pairings, ...) is outside it. Files brought in
-// (drops, uploads, copies, moves) land only in a checkout (`destination`).
+// The path scope of one workspace runtime: operations can use its checkouts,
+// approved external paths, or external paths allowed by workspace settings.
+// Cate's private home data stays protected, and workspace data is read-only.
 // There are no scope ids: the connection is the scope, and the daemon serves
 // one workspace.
 
@@ -14,17 +10,18 @@ import path from 'node:path'
 import { RpcError } from '@kernel/rpc/contract'
 import { createJsonStateFile, type JsonStateFile } from '@kernel/state/node'
 import { dataPaths } from '@runtime/data/runtime'
+import type { FileAccessOperation, FileAccessRequest } from '../contract'
 
 export interface PathScope {
   readonly root: string
   readonly dataDir: string
-  /** Lexical check (no filesystem access). Returns the resolved path. */
+  /** Synchronous check for paths already inside the active scope. */
   resolve(p: string): string
   /** A working directory for a process; lexical like `resolve`. */
   cwd(p: string): string
   /** Resolves symlinks (a missing tail stays literal) and checks the real path.
    *  For reads and anything that follows the path. */
-  strict(p: string): Promise<string>
+  strict(p: string, operation?: FileAccessOperation, grantPath?: string): Promise<string>
   /** For creating or writing `p`: the parent chain is resolved, the final
    *  segment must not be an existing symlink. Returns realParent + basename.
    *  Never in the workspace data. */
@@ -33,20 +30,22 @@ export interface PathScope {
    *  following a final symlink. Never in the workspace data. */
   entry(p: string): Promise<string>
   /** For a folder files are brought into (drops, uploads, copies, moves):
-   *  `strict`, and inside a checkout. The workspace data and granted paths
-   *  outside the checkouts never receive files. */
+   *  `strict`, and inside a checkout or an approved external path. The
+   *  workspace data never receives files through this scope. */
   destination(p: string): Promise<string>
   /** The innermost checkout (the root or a worktree checkout) holding `p`
    *  (already resolved), or null. */
   checkoutOf(p: string): string | null
   /** True when `p` (already resolved) is inside the scope. */
   contains(p: string): boolean
+  /** True when an operation on `p` could recursively include Cate's private data. */
+  containsPrivateData(p: string): boolean
   /** Hook for the repository module: a worktree checkout outside the root. */
   addCheckout(p: string): void
   removeCheckout(p: string): void
   checkouts(): string[]
-  /** Grants a path the user picked outside the workspace; persisted in
-   *  `<data>/grants.json`. A granted directory covers its contents. */
+  /** Remembers an approved path in `<data>/grants.json`. A granted directory
+   *  covers its contents. */
   grant(p: string): Promise<string>
   revokeGrant(p: string): Promise<void>
   grants(): string[]
@@ -58,6 +57,8 @@ export interface PathScopeOptions {
   root: string
   /** The workspace data directory. */
   dataDir: string
+  accessMode?: () => 'ask' | 'full'
+  requestAccess?: (request: Omit<FileAccessRequest, 'id'>) => Promise<boolean>
   platform?: NodeJS.Platform
 }
 
@@ -166,6 +167,15 @@ export function createPathScope(options: PathScopeOptions): PathScope {
   const dataForms = canonicalForms(dataDir, platform)
   const rootForms = canonicalForms(root, platform)
   const data = dataPaths(dataDir)
+  const workspaceDataParent = path.dirname(dataDir)
+  const cateHome = path.dirname(workspaceDataParent)
+  const privateRoot = path.basename(workspaceDataParent) === 'workspaces' && path.basename(cateHome) === '.cate'
+    ? cateHome
+    : dataDir
+  const privateForms = canonicalForms(privateRoot, platform)
+  const screenshotForms = canonicalForms(data.screenshots, platform)
+  const downloadForms = canonicalForms(data.downloads, platform)
+  const accessMode = options.accessMode ?? (() => 'ask')
   const fixedForms = [
     ...rootForms,
     ...canonicalForms(worktreesDir(root), platform),
@@ -189,6 +199,13 @@ export function createPathScope(options: PathScopeOptions): PathScope {
   }
   refreshGrants(grantsFile.get())
   const stopGrants = grantsFile.subscribe((list) => refreshGrants(list))
+  let grantQueue = Promise.resolve()
+
+  const serializeGrants = <T,>(run: () => Promise<T>): Promise<T> => {
+    const result = grantQueue.then(run, run)
+    grantQueue = result.then(() => undefined, () => undefined)
+    return result
+  }
 
   const within = (p: string): boolean => {
     const candidates = new Set([pathCompareKey(p, platform), pathCompareKey(normalizeForComparison(p, platform), platform)])
@@ -200,10 +217,29 @@ export function createPathScope(options: PathScopeOptions): PathScope {
     return false
   }
 
+  const inForms = (p: string, forms: readonly string[]): boolean => {
+    const keys = [pathCompareKey(p, platform), pathCompareKey(normalizeForComparison(p, platform), platform)]
+    return keys.some((key) => forms.some((form) => keyUnder(key, form, platform)))
+  }
+
+  // Full access applies to user files, never Cate's private workspace data.
+  // Screenshots and downloads retain their existing scoped behavior.
+  const privateData = (p: string): boolean =>
+    inForms(p, privateForms)
+    && !inForms(p, screenshotForms)
+    && !inForms(p, downloadForms)
+
+  const known = (p: string): boolean => !privateData(p) && (within(p) || accessMode() === 'full')
+  const containsPrivateData = (p: string): boolean => {
+    if (privateData(p)) return true
+    const roots = [pathCompareKey(p, platform), pathCompareKey(normalizeForComparison(p, platform), platform)]
+    return privateForms.some((form) => roots.some((rootKey) => keyUnder(pathCompareKey(form, platform), rootKey, platform)))
+  }
+
   const resolve = (p: string): string => {
     if (!p || typeof p !== 'string') throw denied('invalid path')
     const normalized = path.resolve(p)
-    if (!within(normalized)) throw denied(`path "${p}" is outside the workspace`)
+    if (privateData(normalized) || !known(normalized)) throw denied(`path "${p}" is outside the workspace`)
     return normalized
   }
 
@@ -214,16 +250,53 @@ export function createPathScope(options: PathScopeOptions): PathScope {
     return resolved
   }
 
-  const strict = async (p: string): Promise<string> => {
-    resolve(p)
+  const authorize = async (target: string, operation: FileAccessOperation, grantTarget = target): Promise<void> => {
+    if (privateData(target)) throw denied(`"${target}" is in Cate's private workspace data`)
+    if (within(target) || accessMode() === 'full') return
+    const requestAccess = options.requestAccess
+    if (!requestAccess) throw denied(`path "${target}" is outside the workspace`)
+    const allowed = await requestAccess({
+      path: target,
+      grantPath: grantTarget,
+      operation,
+    })
+    if (!allowed) throw denied(`access was not granted for "${target}"`)
+    await addGrant(grantTarget)
+    if (!within(target)) throw denied(`access was not granted for "${target}"`)
+  }
+
+  const strict = async (p: string, operation: FileAccessOperation = 'read', grantPath?: string): Promise<string> => {
+    if (!p || typeof p !== 'string') throw denied('invalid path')
     let real: string
     try {
       real = await realpathAllowingMissing(p)
     } catch (err) {
       throw denied(`cannot resolve real path for "${p}": ${err}`)
     }
-    if (!within(real)) throw denied(`resolved path "${real}" is outside the workspace`)
+    let grantTarget = real
+    if (grantPath !== undefined) {
+      try {
+        grantTarget = await realpathAllowingMissing(grantPath)
+      } catch (err) {
+        throw denied(`cannot resolve access grant path "${grantPath}": ${err}`)
+      }
+    }
+    await authorize(real, operation, grantTarget)
     return real
+  }
+
+  const addGrant = async (p: string): Promise<string> => {
+    const target = await creationTarget(p)
+    if (privateData(target)) throw denied(`"${target}" is in Cate's private workspace data`)
+    return serializeGrants(async () => {
+      const current = grantsFile.get()
+      if (!current.includes(target)) {
+        grantsFile.set([...current, target])
+        refreshGrants(grantsFile.get())
+        await grantsFile.flushDurable()
+      }
+      return target
+    })
   }
 
   const checkoutOf = (p: string): string | null => {
@@ -240,13 +313,17 @@ export function createPathScope(options: PathScopeOptions): PathScope {
     dataDir,
     resolve,
     cwd: resolve,
-    contains: within,
+    contains: known,
+    containsPrivateData,
 
     strict,
 
     async destination(p) {
-      const real = await strict(p)
-      if (!checkoutOf(real)) throw denied(`"${p}" is not inside a checkout of the workspace`)
+      const real = await strict(p, 'write')
+      const granted = [...grantForms.values()].some((forms) => inForms(real, forms))
+      if (!checkoutOf(real) && accessMode() !== 'full' && !granted) {
+        throw denied(`"${p}" is not inside a checkout of the workspace or an approved external folder`)
+      }
       return real
     },
     checkoutOf,
@@ -262,13 +339,15 @@ export function createPathScope(options: PathScopeOptions): PathScope {
       if (stat?.isSymbolicLink()) throw denied(`"${p}" is a symbolic link`)
       // Only the resolved form counts: accepting the lexical one would undo the
       // parent resolution for a symlinked directory inside the root.
-      if (!within(target)) throw denied(`resolved parent "${path.dirname(target)}" is outside the workspace`)
+      await authorize(target, 'write')
       return outsideData(target, p)
     },
 
     async entry(p) {
-      resolve(p)
-      return outsideData(resolve(await creationTarget(p)), p)
+      const target = await creationTarget(p)
+      if (containsPrivateData(target)) throw denied(`"${p}" contains Cate's private workspace data`)
+      await authorize(target, 'write')
+      return outsideData(target, p)
     },
 
     addCheckout(p) {
@@ -281,21 +360,16 @@ export function createPathScope(options: PathScopeOptions): PathScope {
     checkouts: () => [...checkoutForms.keys()],
 
     async grant(p) {
-      const target = await creationTarget(p)
-      const current = grantsFile.get()
-      if (!current.includes(target)) {
-        grantsFile.set([...current, target])
-        refreshGrants(grantsFile.get())
-        await grantsFile.flushDurable()
-      }
-      return target
+      return addGrant(p)
     },
     async revokeGrant(p) {
       const target = await creationTarget(p).catch(() => path.resolve(p))
-      const next = grantsFile.get().filter((g) => g !== target && g !== path.resolve(p))
-      grantsFile.set(next)
-      refreshGrants(next)
-      await grantsFile.flushDurable()
+      await serializeGrants(async () => {
+        const next = grantsFile.get().filter((g) => g !== target && g !== path.resolve(p))
+        grantsFile.set(next)
+        refreshGrants(next)
+        await grantsFile.flushDurable()
+      })
     },
     grants: () => [...grantsFile.get()],
 
