@@ -43,6 +43,7 @@ import type {
 import { HeadlessScreen } from './headlessScreen'
 import { activityForPid, countingScanner, systemScanner, type ProcessScanner } from './procScan'
 import { resolveShell as resolveHostShell } from './shellResolver'
+import { resolveSpawnExecutable } from './spawnExecutable'
 import { sanitizeEnv } from './loginEnv'
 import { TerminalLog, isSafeLogKey, readSavedScreen, removeLogFiles } from './terminalLog'
 
@@ -568,7 +569,7 @@ export function createTerminalService(deps: TerminalServiceDeps): TerminalServic
     }
     // Trust may have been revoked while contributors ran.
     deps.trust.requireTrusted()
-    return spawnPty(executable, [...args], { name: 'xterm-256color', cols: params.cols, rows: params.rows, cwd, env })
+    return spawnPty(resolveSpawnExecutable(executable, env), [...args], { name: 'xterm-256color', cols: params.cols, rows: params.rows, cwd, env })
   }
 
   const service: TerminalService = {
