@@ -203,7 +203,13 @@ export function createSetupRuntime(deps: SetupRuntimeDeps) {
 
     const panelIds: Record<string, string> = {}
     const warnings: string[] = []
-    for (const node of entry.setup.nodes) {
+    const task = params.orchestratorPrompt?.trim()
+    // Build workers before starting a tasked orchestrator so its prompt can name
+    // the real panels, and its first dispatch cannot race their creation.
+    const orderedNodes = task
+      ? [...entry.setup.nodes.filter((node) => !node.orchestrator), ...entry.setup.nodes.filter((node) => node.orchestrator)]
+      : entry.setup.nodes
+    for (const node of orderedNodes) {
       const at: Extract<PlaceTarget, { to: 'canvas' }> = {
         to: 'canvas',
         canvasId,
@@ -212,8 +218,15 @@ export function createSetupRuntime(deps: SetupRuntimeDeps) {
         rect: { origin: node.position, size: node.size ?? DEFAULT_SETUP_NODE_SIZE },
       }
       try {
-        const initialPrompt = node.orchestrator && params.orchestratorPrompt?.trim()
-          ? params.orchestratorPrompt.trim()
+        const initialPrompt = node.orchestrator && task
+          ? [
+              node.prompt,
+              `Setup panels (node id → panel id):\n${JSON.stringify(panelIds)}`,
+              ...entry.setup.nodes.filter((member) => !member.orchestrator).map((member) =>
+                `Role ${member.id} (${member.title}): ${member.prompt ?? ''}`),
+              ...(warnings.length ? [`Setup warnings: ${warnings.join('; ')}`] : []),
+              `Task:\n${task}`,
+            ].filter(Boolean).join('\n\n')
           : undefined
         const baseStartArgs = {
           ...(node.agentId ? { agentId: node.agentId } : {}),

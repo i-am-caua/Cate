@@ -77,7 +77,32 @@ python3 $S/setup_export.py profile base [--out setups.json] [--to-cate]
 ```
 
 - **Provider mapping**: `claude`→`claude-code`, `codex`→`codex`, `agy`/`antigravity`→`agy`, `opencode`→`opencode`, `auto`→first ready Cate agent (or `null`). `kimi` and `custom` are omitted with a stderr notice.
-- **`--to-cate`**: Writes setup to `<cwd>/.cate/setups/<id>.json` and imports it with `cate setup import` if available.
+- **`--to-cate`**: Writes profile setups to `~/.cate/setups/<id>.json` by default;
+  `--workspace` selects `<cwd>/.cate/setups/`. Plan exports default to the workspace
+  (`--global` selects the user directory). Cate reads these files directly.
+
+Profile exports and the HTML editor use the declared provider order and tier settings,
+including partial profile overrides and explicit phase provider/model/effort. Roles do
+not silently select a different provider or downgrade a tier. Pin `provider` on a phase
+when, for example, execution should use Codex and advice should use Agy.
+
+A setup describes persistent agent panels, not a linear list of phase instances:
+
+- Every `who: lead` phase belongs to the orchestrator panel.
+- A `rescue` phase reuses the earlier panels with the same role, preserving sessions
+  and worktrees. A rescue without an earlier matching role fails export.
+- `workers` declares the number of available panels; only `isolate: true` writing
+  phases request new worktrees.
+- The orchestrator's role prompt retains the full phase-to-panel mapping, conditions,
+  gates, rules, limits, quota/budget settings and next playbook. Relations connect
+  workers to the orchestrator so workers do not trigger conditional phases themselves.
+
+Cate opens panels idle by default. When applying with an initial task, it creates the
+workers first and includes their actual panel ids, role prompts and setup instructions
+in the orchestrator's initial prompt. Conditions and resumption are coordinated by
+that agent through `cate agent send`, not executed by a separate workflow scheduler.
+Without an initial task, the saved role prompts remain reference instructions in the
+setup preview; no workflow is automatically dispatched.
 
 ## Cate panel waves (by hand)
 

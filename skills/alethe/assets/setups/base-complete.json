@@ -3,35 +3,60 @@
   "id": "base-complete",
   "name": "Complete (base)",
   "source": "alethe",
+  "description": "Each tier on its usual model.",
   "nodes": [
     {
       "id": "lead",
-      "agent": "agy",
-      "model": "gemini-4-argon-medium",
-      "effort": "medium",
-      "tier": "standard",
-      "title": "Orquestrador (Argon)",
-      "orchestrator": true,
-      "prompt": "Orquestrar as fases do playbook usando Gemini 4 Argon.\n\nRead the task; unless it is narrow, split it into bounded units and tag each one with a kind and an effort class.",
-      "worktree": null,
-      "mode": "read-only"
-    },
-    {
-      "id": "quick",
-      "agent": "codex",
-      "model": "gpt-6-luna",
+      "agent": "claude-code",
+      "model": "opus",
       "effort": "high",
       "tier": "strong",
-      "title": "do it yourself",
-      "orchestrator": false,
-      "mode": "write",
+      "title": "Orquestrador",
+      "orchestrator": true,
+      "mode": "read-only",
       "worktree": null,
-      "prompt": "A narrow task never leaves your session; make the change and run the checks."
+      "prompt": "Coordinate this playbook using the existing panels identified by setup node id.\nOnly the orchestrator dispatches work, using cate agent send; wait/read replies before deciding the next phase.\nEvaluate if/with branches, gates and first-matching rules; retain limits, then/after, quota and budget policies.\nA rescue phase reuses its assigned panel and session; never start a replacement executor for a continuation.\nConditional phases remain idle until their condition holds. Do not execute every phase as a linear sequence.\nWorker counts are capacity: dispatch only the units that need a phase, including individual rescue follow-ups.\nPanel model/effort are the baseline. If a rule needs a different model, report the required escalation before proceeding.\nWorktrees and read-only modes are requirements to enforce when dispatching, not evidence of sandbox enforcement.\nWorkflow (phase nodes reference the setup ids; map these to the launched panel ids):\n{\"budget\":{\"warnAt\":80,\"whenLow\":\"finish-and-report\"},\"next\":null,\"phases\":[{\"does\":\"Read the task; unless it is narrow, split it into bounded units and tag each one with a kind and an effort class.\",\"id\":\"plan\",\"nodes\":[\"lead\"],\"readOnly\":true,\"role\":\"planner\",\"tier\":\"strong\",\"who\":\"lead\"},{\"does\":\"A narrow task never leaves your session; make the change and run the checks.\",\"id\":\"quick\",\"if\":\"narrow\",\"nodes\":[\"lead\"],\"role\":\"do it yourself\",\"then\":\"done\",\"tier\":\"strong\",\"who\":\"lead\"},{\"does\":\"One question per scout.\",\"id\":\"read\",\"if\":\"kind:research\",\"nodes\":[\"read-1\",\"read-2\",\"read-3\",\"read-4\"],\"readOnly\":true,\"returns\":\"The answer with file:line evidence, under 1.5K tokens.\",\"role\":\"scout\",\"runner\":\"research\",\"then\":\"done\",\"tier\":\"cheap\",\"with\":\"quick\",\"workers\":4},{\"does\":\"Implement one unit.\",\"id\":\"build\",\"if\":\"not kind:research\",\"nodes\":[\"build\"],\"readOnly\":false,\"returns\":\"Changed files, checks run, failures and risks.\",\"role\":\"builder\",\"rules\":[{\"if\":[\"deep\",\"claude-opus-above:50\"],\"use\":{\"effort\":\"high\",\"model\":\"sonnet\"}},{\"if\":\"deep\",\"use\":{\"tier\":\"strong\"}},{\"if\":[\"risky\",\"light\"],\"use\":{\"tier\":\"standard\"}},{\"if\":\"light\",\"use\":{\"tier\":\"cheap\"}}],\"runner\":\"economy\",\"tier\":\"standard\",\"with\":\"quick\"},{\"does\":\"Review the finished diff against the plan and the repository rules.\",\"gate\":\"Checks pass and the diff matches the plan.\",\"id\":\"review\",\"nodes\":[\"review\"],\"provider\":\"codex\",\"readOnly\":true,\"role\":\"reviewer\",\"runner\":\"economy\",\"tier\":\"standard\"},{\"after\":\"review\",\"does\":\"Fix from the failure excerpt and the review notes.\",\"id\":\"fix\",\"if\":\"checks-failed\",\"nodes\":[\"fix\"],\"readOnly\":false,\"role\":\"fixer\",\"rules\":[{\"if\":\"budget-low\",\"use\":{\"effort\":\"high\",\"tier\":\"standard\"}},{\"if\":\"claude-low\",\"use\":{\"effort\":\"xhigh\",\"provider\":\"codex\"}}],\"runner\":\"economy\",\"then\":\"recheck\",\"tier\":\"strong\"}],\"playbook\":\"complete\",\"principles\":[\"Do the work yourself when briefing a worker would cost more; delegation always has a floor cost.\",\"Spend the strong tier on decisions and the cheap tier on volume.\",\"Pin every worker's model and effort; a worker without them runs on its CLI's default model, which can be the most expensive one.\",\"Keep your context small; workers return answers, evidence and diffs, never transcripts.\",\"Split by independent unit and no finer; more, narrower briefs raised the bill in Anthropic's own run.\",\"Escalate on a failed check, never on a worker's own claim, one tier at a time and once per unit.\",\"Review a finished diff, never work in progress.\",\"Keep a worker's model and effort fixed for its whole session; switching discards its prompt cache.\",\"Use xhigh only to escalate, and avoid max.\",\"Cap every run with a budget and compare cost per finished task.\",\"Cheap models triage and skip; judging whether code is correct takes the standard tier or above.\",\"A risky unit never runs on the cheap tier, and its diff goes through review-gate.\"],\"profile\":\"base\",\"quota\":{\"criticalThreshold\":80,\"onBothCritical\":\"ask\",\"planEnds\":{},\"spareMinLeft\":30,\"spareWithinHours\":24,\"stopAt\":95,\"whenLow\":\"switch-provider\",\"whenSpare\":\"spend-strong\"}}"
     },
     {
-      "id": "read",
-      "agent": "agy",
-      "model": "gemini-3.8-flash-low",
+      "id": "read-1",
+      "agent": "claude-code",
+      "model": "haiku",
+      "effort": "low",
+      "tier": "cheap",
+      "title": "scout",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "One question per scout."
+    },
+    {
+      "id": "read-2",
+      "agent": "claude-code",
+      "model": "haiku",
+      "effort": "low",
+      "tier": "cheap",
+      "title": "scout",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "One question per scout."
+    },
+    {
+      "id": "read-3",
+      "agent": "claude-code",
+      "model": "haiku",
+      "effort": "low",
+      "tier": "cheap",
+      "title": "scout",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "One question per scout."
+    },
+    {
+      "id": "read-4",
+      "agent": "claude-code",
+      "model": "haiku",
       "effort": "low",
       "tier": "cheap",
       "title": "scout",
@@ -42,8 +67,8 @@
     },
     {
       "id": "build",
-      "agent": "codex",
-      "model": "gpt-6-luna",
+      "agent": "claude-code",
+      "model": "sonnet",
       "effort": "medium",
       "tier": "standard",
       "title": "builder",
@@ -55,7 +80,7 @@
     {
       "id": "review",
       "agent": "codex",
-      "model": "gpt-6-luna",
+      "model": null,
       "effort": "medium",
       "tier": "standard",
       "title": "reviewer",
@@ -66,8 +91,8 @@
     },
     {
       "id": "fix",
-      "agent": "codex",
-      "model": "gpt-6-luna",
+      "agent": "claude-code",
+      "model": "opus",
       "effort": "high",
       "tier": "strong",
       "title": "fixer",
@@ -80,36 +105,48 @@
   "edges": [
     {
       "from": "lead",
-      "to": "quick",
-      "kind": "trigger",
-      "label": "do it yourself"
-    },
-    {
-      "from": "quick",
-      "to": "read",
+      "to": "read-1",
       "kind": "context",
       "label": "scout"
     },
     {
-      "from": "read",
+      "from": "lead",
+      "to": "read-2",
+      "kind": "context",
+      "label": "scout"
+    },
+    {
+      "from": "lead",
+      "to": "read-3",
+      "kind": "context",
+      "label": "scout"
+    },
+    {
+      "from": "lead",
+      "to": "read-4",
+      "kind": "context",
+      "label": "scout"
+    },
+    {
+      "from": "lead",
       "to": "build",
       "kind": "trigger",
       "label": "builder"
     },
     {
-      "from": "build",
+      "from": "lead",
       "to": "review",
-      "kind": "verify",
+      "kind": "context",
       "label": "reviewer"
     },
     {
-      "from": "review",
+      "from": "lead",
       "to": "fix",
       "kind": "trigger",
       "label": "fixer"
     }
   ],
   "budget": {
-    "maxWorkers": 6
+    "maxWorkers": 8
   }
 }
