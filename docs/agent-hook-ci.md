@@ -97,6 +97,10 @@ Cate's per-event hook commands supply the name to the shared bridge. The
 `PreInvocation` can repeat within a turn, and a `Stop` with `fullyIdle: false`
 does not mark the agent ready.
 
+The OpenCode plugin exports only plugin factory functions. Its loader initializes
+every module export; an extra default object can prevent all hooks from loading.
+The generated-plugin regression test initializes every export, matching that loader.
+
 The child environment excludes inherited credentials in mock mode. Configuration
 is disposable; Cursor uses its in-memory credential store so macOS Keychain is
 never read or modified. Kiro runs its installed V3 engine against loopback

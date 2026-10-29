@@ -129,8 +129,12 @@ it('executes the generated OpenCode plugin and retains child-session linkage', a
   const env = await hooks.envForPty('one', { PATH: process.env.PATH ?? '' })
   const plugin = await readFile(path.join(directory, '.opencode/plugin/cate-hook.js'), 'utf8')
   const script = `
-    const { CateHookBridge } = await import(${JSON.stringify('data:text/javascript;base64,' + Buffer.from(plugin).toString('base64'))});
-    const bridge = await CateHookBridge();
+    const pluginModule = await import(${JSON.stringify('data:text/javascript;base64,' + Buffer.from(plugin).toString('base64'))});
+    // OpenCode initializes EVERY module export as a plugin factory.
+    // Selecting only the named export would hide an invalid default export.
+    const bridges = await Promise.all(Object.values(pluginModule).map(factory => factory()));
+    if (bridges.length !== 1) throw new Error('Expected exactly one Cate plugin');
+    const [bridge] = bridges;
     await bridge.event({ event: { type: 'session.created', properties: { info: { id: 'child', parentID: 'parent' } } } });
     await bridge.event({ event: { type: 'message.part.updated', properties: { part: { sessionID: 'child', type: 'tool', tool: 'edit', callID: 'edit', state: { status: 'completed', input: { filePath: 'plugin.ts', oldString: 'old', newString: 'new' } } } } } });
     await bridge.event({ event: { type: 'message.part.updated', properties: { part: { sessionID: 'child', type: 'tool', tool: 'bash', callID: 'running', state: { status: 'running', input: { command: 'npm test' } } } } } });

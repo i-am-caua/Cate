@@ -828,17 +828,7 @@ export const CateHookBridge = async () => {
     event: async ({ event }) => dispatchEvent(event),
   }
 }
-export default {
-  id: "cate-hook",
-  setup: async (api) => {
-    if (!ENDPOINT || !TOKEN) return {}
-    if (api?.event?.subscribe) {
-      api.event.subscribe(async (event) => {
-        await dispatchEvent(event)
-      })
-    }
-  },
-}
+
 `
 
 const opencodeSpec: AgentHookSpec = {
