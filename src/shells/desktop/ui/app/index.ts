@@ -80,7 +80,7 @@ export { ONBOARDING_STEPS, type OnboardingStep } from './onboarding/steps'
 // Workspace: opening files, the contexts workspace UI reads, and the
 // workspace views registered into other modules' slots.
 export { openFile, openDroppedFiles } from './workspace/fileActions'
-export { FileViewsHost, WorkspaceScope, installReviewOpener, type ReviewOpener } from './workspace/hosts'
+export { FileViewsHost, WorkspaceScope, WorkspaceFileAccessPrompts, installReviewOpener, type ReviewOpener } from './workspace/hosts'
 export { useWorkspaceBlock } from './workspace/ConnectionBlocker'
 export { WorkspaceGate } from './workspace/opening'
 export { registerWorkspaceViews } from './workspace/views'

@@ -49,9 +49,10 @@ export function runRipgrepSearch(
   rootPath: string,
   extraExcludes: string[],
   callbacks: SearchCallbacks,
+  alwaysExcludes: string[] = [],
 ): SearchHandle {
   const maxResults = opts.maxResults ?? DEFAULT_MAX_RESULTS
-  const args = buildRipgrepArgs(opts, rootPath, extraExcludes)
+  const args = buildRipgrepArgs(opts, rootPath, extraExcludes, alwaysExcludes)
 
   let child: ChildProcessWithoutNullStreams | null = null
   let finished = false

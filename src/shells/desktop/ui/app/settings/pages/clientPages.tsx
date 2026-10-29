@@ -15,7 +15,7 @@ import {
   useClientSetting,
   useWorkspaceSettings,
 } from '../../../kernel/settings'
-import { tryRuntimeFor } from '@kernel/rpc/client'
+import { subscribeRuntimes, tryRuntimeFor } from '@kernel/rpc/client'
 import type { SettingsPageProps } from '../registry'
 
 function setWs<K extends WorkspaceSettingKey>(workspaceId: string, key: K, value: WorkspaceSettings[K]): void {
@@ -265,6 +265,69 @@ export function WorkspaceBrowserPage({ workspaceId }: SettingsPageProps): JSX.El
           {confirmingClear ? 'Confirm clear' : 'Clear…'}
         </SecondaryButton>
       </SettingRow>
+    </div>
+  )
+}
+
+export function WorkspaceFilesPage({ workspaceId }: SettingsPageProps): JSX.Element | null {
+  const ws = useWorkspaceSettings(workspaceId)
+  const [grants, setGrants] = useState<string[]>([])
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    if (!workspaceId) return
+    let current = true
+    const refresh = () => {
+      void tryRuntimeFor(workspaceId)?.file.grants().then((paths) => {
+        if (current) setGrants(paths)
+      }).catch(() => {})
+    }
+    const unsubscribe = subscribeRuntimes(refresh)
+    refresh()
+    return () => { current = false; unsubscribe() }
+  }, [workspaceId])
+
+  const revoke = async (path: string) => {
+    if (!workspaceId) return
+    try {
+      await tryRuntimeFor(workspaceId)?.file.revokeGrant({ path })
+      setGrants((current) => current.filter((grant) => grant !== path))
+      setMessage('Access revoked.')
+    } catch (err) {
+      setMessage(errorMessage(err, 'Could not revoke access.'))
+    }
+  }
+
+  if (!workspaceId) return null
+  return (
+    <div className="flex flex-col gap-1">
+      <SettingRow
+        label="Access outside this workspace"
+        keywords="full access limited ask permission files paths"
+        description={ws.fileAccessMode === 'full'
+          ? "Full access skips prompts for Cate's file tools. Cate's private data stays protected. Terminal commands and agent programs still run with your normal operating-system permissions."
+          : "Ask mode requests permission before Cate's file tools use an unapproved path. Approval is remembered for that file or folder. Terminal commands and agent programs still run with your normal operating-system permissions."}
+      >
+        <Select
+          value={ws.fileAccessMode}
+          onChange={(value) => setWs(workspaceId, 'fileAccessMode', value as WorkspaceSettings['fileAccessMode'])}
+          options={[
+            { value: 'ask', label: 'Ask before access' },
+            { value: 'full', label: 'Full access' },
+          ]}
+        />
+      </SettingRow>
+      <SettingRow
+        label="Approved paths"
+        description={message || (grants.length ? 'These paths remain available while this workspace uses ask mode.' : 'No additional paths have been approved.')}
+      >
+        <span className="text-xs text-muted">{grants.length}</span>
+      </SettingRow>
+      {grants.map((path) => (
+        <SettingRow key={path} label="Approved path" description={path}>
+          <SecondaryButton onClick={() => void revoke(path)}>Revoke</SecondaryButton>
+        </SettingRow>
+      ))}
     </div>
   )
 }

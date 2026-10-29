@@ -77,7 +77,7 @@ function validateSetup(value: unknown): CateSetup {
       refuse('nodes[' + index + '].prompt must be a string of at most 50000 characters')
     }
     for (const field of ['model', 'effort', 'tier'] as const) {
-      if (node[field] !== undefined && (typeof node[field] !== 'string' || !node[field].trim())) {
+      if (node[field] !== undefined && node[field] !== null && (typeof node[field] !== 'string' || !node[field].trim())) {
         refuse('nodes[' + index + '].' + field + ' must be a non-empty string')
       }
     }

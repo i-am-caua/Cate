@@ -30,11 +30,13 @@ import {
   type SearchDone,
   type SearchFileResult,
   type SearchOptions,
+  type FileAccessMode,
   type fileCapability,
   type searchCapability,
 } from '../contract'
 import * as Y from 'yjs'
-import { createPathScope, type PathScope } from './pathScope'
+import { createPathScope, realpathAllowingMissing, type PathScope } from './pathScope'
+import { FileAccessRequests } from './accessRequests'
 import { createWatchPool, type WatchPool, type WatchPoolDeps } from './watchPool'
 import { createBufferService, type BufferService } from './buffers'
 import { ByteInput } from './byteInput'
@@ -55,6 +57,8 @@ export interface FilesRuntimeDeps {
    *  the workspace is untrusted. The file server serves no script-running
    *  pages while it is. */
   trust: { isTrusted(): boolean; requireTrusted(): void }
+  /** Workspace policy for external file operations. Defaults to ask. */
+  fileAccessMode?: () => FileAccessMode
   /** Test seams. */
   watcher?: WatchPoolDeps
   trash?: (safePath: string) => Promise<boolean>
@@ -67,6 +71,7 @@ export interface FilesRuntime {
   /** The per-path write queue (13.3). Other modules writing workspace files
    *  go through it too. */
   readonly lock: KeyedLock
+  readonly accessRequests: FileAccessRequests
   read(p: string): Promise<FileText>
   readBinary(p: string): Promise<Uint8Array>
   write(p: string, content: string | Uint8Array, baseHash?: string | null): Promise<{ path: string; hash: string }>
@@ -97,6 +102,8 @@ export interface FilesRuntime {
   downloadsDir(): string
   /** Where screenshots are stored. */
   screenshotsDir(): string
+  grants(): string[]
+  revokeGrant(path: string): Promise<void>
   setExclusions(names: readonly string[]): Promise<void>
   dispose(): Promise<void>
 }
@@ -112,7 +119,18 @@ function conflict(hash: string | null): RpcError {
 
 export function createFilesRuntime(deps: FilesRuntimeDeps): FilesRuntime {
   const exclusions = new Set(deps.exclusions ?? FILE_EXCLUSIONS)
-  const paths = createPathScope({ root: deps.root, dataDir: deps.dataPaths.dir })
+  const dataParent = path.dirname(deps.dataPaths.dir)
+  const cateHome = path.dirname(dataParent)
+  const privateDataRoot = path.basename(dataParent) === 'workspaces' && path.basename(cateHome) === '.cate'
+    ? cateHome
+    : deps.dataPaths.dir
+  const accessRequests = new FileAccessRequests()
+  const paths = createPathScope({
+    root: deps.root,
+    dataDir: deps.dataPaths.dir,
+    accessMode: deps.fileAccessMode,
+    ...(deps.fileAccessMode ? { requestAccess: (request) => accessRequests.request(request) } : {}),
+  })
   const lock = new KeyedLock()
   const pool: WatchPool = createWatchPool(
     () => exclusions,
@@ -130,8 +148,8 @@ export function createFilesRuntime(deps: FilesRuntimeDeps): FilesRuntime {
   const rgPath = deps.rgPath ?? daemonRgPath()
   const locked = <T>(p: string, fn: () => Promise<T>) => lock.run(pathKey(p), fn)
   const moveListeners = new Set<(from: string, to: string) => void>()
-  // Pages may fetch anything the server serves, so it never serves the
-  // workspace data (secrets, pairings): only the root, checkouts and grants.
+  // Pages may fetch anything the server serves, so private Cate data is never
+  // served. Every requested file still passes through the path scope.
   const server = createFileServer({
     strict: async (p) => {
       const safe = await paths.strict(p)
@@ -158,6 +176,7 @@ export function createFilesRuntime(deps: FilesRuntimeDeps): FilesRuntime {
     paths,
     buffers,
     lock,
+    accessRequests,
 
     async read(p) {
       const bytes = await fs.readFile(await paths.strict(p))
@@ -168,7 +187,7 @@ export function createFilesRuntime(deps: FilesRuntimeDeps): FilesRuntime {
     },
     write,
     async readDir(p) {
-      return readDir(await paths.strict(p), exclusions)
+      return readDir(await paths.strict(p, 'browse'), exclusions)
     },
     async stat(p) {
       return statEntry(await paths.strict(p))
@@ -204,26 +223,41 @@ export function createFilesRuntime(deps: FilesRuntimeDeps): FilesRuntime {
       await fs.mkdir(await paths.forCreation(p), { recursive: true })
     },
     async copy(p, destDir) {
-      return { path: await copyInto(await paths.strict(p), await paths.destination(destDir)) }
+      const source = await realpathAllowingMissing(p)
+      if (paths.containsPrivateData(source)) throw new RpcError('rejected', `"${p}" contains Cate's private workspace data`)
+      return { path: await copyInto(await paths.strict(source), await paths.destination(destDir)) }
     },
     async tempDir(near = paths.root) {
-      const checkout = paths.checkoutOf(await paths.destination(near))!
+      // A temp dir is always a checkout-local runtime folder; do not prompt
+      // for a `near` outside any checkout, which will be rejected either way.
+      const realNear = await realpathAllowingMissing(near)
+      const checkout = paths.checkoutOf(realNear)
+      if (!checkout) throw new RpcError('rejected', `"${near}" is not inside a checkout of the workspace`)
+      await paths.strict(near)
       await ensureCateGitignore(checkout)
       const dir = await paths.forCreation(cateTempDir(checkout))
       await fs.mkdir(dir, { recursive: true })
       return dir
     },
-    serveUrl: (p) => server.urlFor(p),
+    async serveUrl(p) {
+      // Grant a browser page's parent folder so relative assets (CSS, images,
+      // scripts) load under the same decision as the HTML file.
+      const file = await realpathAllowingMissing(p)
+      await paths.strict(file, 'browse', path.dirname(file))
+      return server.urlFor(file)
+    },
     servedPath: (url) => server.pathOf(url),
     watch(p, onChange) {
-      // Checked on its real path (a link out of the workspace is refused) but
-      // watched under the path asked for, so changes come back as the caller
-      // named them.
-      const safe = paths.resolve(p)
+      // Checked on its real path, but watched under the path asked for so
+      // changes come back as the caller named them.
+      const safe = path.resolve(p)
       let stop: (() => void) | null = null
       let stopped = false
-      paths.strict(p).then(() => {
-        if (!stopped) stop = pool.subscribe(safe, onChange)
+      paths.strict(p, 'browse').then(() => {
+        if (!stopped) stop = pool.subscribe(safe, (changedPath, type) => {
+          if (pathHasPrefix(pathKey(changedPath), pathKey(privateDataRoot))) return
+          onChange(changedPath, type)
+        })
       }, (err) => deps.log?.warn('watch refused', p, err))
       return () => {
         stopped = true
@@ -231,15 +265,27 @@ export function createFilesRuntime(deps: FilesRuntimeDeps): FilesRuntime {
       }
     },
     async searchFiles(query, opts = {}) {
-      const root = await paths.strict(opts.root ?? paths.root)
-      return searchFileNames(root, query, exclusions, opts.maxResults)
+      const root = await paths.strict(opts.root ?? paths.root, 'browse')
+      const privateRoot = await realpathAllowingMissing(privateDataRoot)
+      const protectedPaths = pathHasPrefix(pathKey(privateRoot), pathKey(root)) ? [privateRoot] : []
+      return searchFileNames(root, query, exclusions, opts.maxResults, protectedPaths)
     },
     searchContent(options, callbacks, root) {
       deps.trust.requireTrusted()
       let handle: SearchHandle | null = null
       let cancelled = false
       paths.strict(root ?? paths.root).then((dir) => {
-        if (!cancelled) handle = runRipgrepSearch(rgPath, options, dir, [...exclusions], callbacks)
+        if (cancelled) return
+        void realpathAllowingMissing(privateDataRoot).then((privateRoot) => {
+          if (cancelled) return
+          // ripgrep's basename glob protects Cate's data even when the user
+          // searches an ancestor such as their home or the filesystem root.
+          const protectedName = path.basename(privateRoot)
+          const protectedPaths = pathHasPrefix(pathKey(privateRoot), pathKey(dir))
+            ? [protectedName, `${protectedName}/**`]
+            : []
+          handle = runRipgrepSearch(rgPath, options, dir, [...exclusions], callbacks, protectedPaths)
+        }, (err: Error) => callbacks.onDone({ matches: 0, files: 0, truncated: false }, err.message))
       }, (err: Error) => callbacks.onDone({ matches: 0, files: 0, truncated: false }, err.message))
       return {
         cancel: () => {
@@ -250,6 +296,8 @@ export function createFilesRuntime(deps: FilesRuntimeDeps): FilesRuntime {
     },
     downloadsDir: () => deps.dataPaths.downloads,
     screenshotsDir: () => deps.dataPaths.screenshots,
+    grants: () => paths.grants(),
+    revokeGrant: (p) => paths.revokeGrant(p),
     async setExclusions(names) {
       exclusions.clear()
       for (const name of names) exclusions.add(name)
@@ -259,6 +307,7 @@ export function createFilesRuntime(deps: FilesRuntimeDeps): FilesRuntime {
       await server.close()
       await buffers.dispose()
       await pool.closeAll()
+      accessRequests.dispose()
       paths.dispose()
     },
   }
@@ -376,8 +425,19 @@ export function fileCapabilityImpl(files: FilesRuntime): CapabilityImpl<typeof f
     tempDir: async ({ near }) => ({ path: await files.tempDir(near) }),
     serveUrl: async ({ path: p }) => ({ url: await files.serveUrl(p) }),
     grant: async ({ path: p }) => ({ path: await files.paths.grant(p) }),
+    grants: () => files.grants(),
+    revokeGrant: ({ path: p }) => files.revokeGrant(p),
+    resolveAccessRequest: ({ requestId, allow }, ctx) => {
+      if (!ctx.connection.client) throw new RpcError('rejected', 'Only Cate clients can answer file-access requests')
+      files.accessRequests.resolve(ctx.connection.id, requestId, allow)
+    },
     saveBuffer: ({ path: p }) => files.buffers.save(p),
     resolveBuffer: ({ path: p, resolution }) => files.buffers.resolveConflict(p, resolution),
+
+    accessRequests: (_params, sink, ctx) => {
+      if (!ctx.connection.client) throw new RpcError('rejected', 'Only Cate clients can receive file-access requests')
+      return files.accessRequests.subscribe(ctx.connection.id, (request) => sink.emit(request))
+    },
 
     readBinary: async ({ path: p }, sink, ctx) => {
       const bytes = await files.readBinary(p)

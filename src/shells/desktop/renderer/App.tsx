@@ -7,7 +7,7 @@ import { MAIN_WINDOW } from '@workspace/document/contract'
 import { PersistentPanelHost } from '../ui/client/host/PersistentPanelHost'
 import { FileDropOverlay, useFileDropTracker } from '../ui/client/layout/drag'
 import { MainWindowView, WindowView } from '../ui/client/layout/windows'
-import { ClientOverlays, FileViewsHost, LeftSidebarReopen, Sidebar, WelcomePage, WindowIdContext, WorkspaceScope, useLeftChromeInset, useShortcuts, useShownWorkspaceId, useUIStore, useWindowControlsInset, useWorkspaceBlock, WorkspaceGate } from '../ui/app'
+import { ClientOverlays, FileViewsHost, LeftSidebarReopen, Sidebar, WelcomePage, WindowIdContext, WorkspaceFileAccessPrompts, WorkspaceScope, useLeftChromeInset, useShortcuts, useShownWorkspaceId, useUIStore, useWindowControlsInset, useWorkspaceBlock, WorkspaceGate } from '../ui/app'
 import { useWorkspaceList } from '../ui/client/workspaces'
 import type { DesktopClient } from './boot'
 import { PerfHud } from './perf/PerfHud'
@@ -36,6 +36,7 @@ function MainApp({ client }: { client: DesktopClient }) {
   const overlay = useUIStore((s) => s.overlay)
   // Native surfaces would paint over the connection cover.
   const { blocked } = useWorkspaceBlock(workspaceId)
+  const { open } = useWorkspaceList(client.workspaces)
   const platform = client.info.platform
   useShortcuts()
   useFileDropTracker()
@@ -58,6 +59,7 @@ function MainApp({ client }: { client: DesktopClient }) {
   // own scope instead.
   return (
     <>
+      <WorkspaceFileAccessPrompts workspaceIds={open} />
       <div className={`h-screen w-screen flex flex-col ${platform === 'darwin' ? '' : 'bg-canvas-bg'}`}>
         <TitleBar api={client.api} platform={platform} />
         <MacTrafficLightStrip api={client.api} platform={platform} />
@@ -101,6 +103,7 @@ function DetachedApp({ client, workspaceId, windowId }: { client: DesktopClient;
   useWindowTitle(client, workspaceId)
   return (
     <WindowIdContext.Provider value={windowId}>
+      <WorkspaceFileAccessPrompts workspaceIds={[workspaceId]} />
       <WorkspaceScope workspaceId={workspaceId}>
         <div className="h-screen w-screen flex flex-col bg-canvas-bg">
           <TitleBar api={client.api} platform={client.info.platform} />

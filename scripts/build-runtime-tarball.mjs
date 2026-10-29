@@ -667,18 +667,41 @@ function unzipInto(zipPath, destDir) {
  *  daemon runs. */
 function pruneDevInstalls() {
   const live = new Set()
+  let hasUnmatchedLiveRuntime = false
   const workspaces = path.join(os.homedir(), '.cate', 'workspaces')
   for (const id of existsSync(workspaces) ? readdirSync(workspaces) : []) {
     try {
       const info = JSON.parse(readFileSync(path.join(workspaces, id, 'runtime.json'), 'utf-8'))
-      process.kill(info.pid, 0)
-      live.add(info.build)
+      if (!Number.isInteger(info.pid) || info.pid < 1) continue
+      try {
+        process.kill(info.pid, 0)
+      } catch (err) {
+        if (err?.code !== 'EPERM') continue
+      }
+      if (typeof info.build === 'string' && existsSync(path.join(runtimeDir, info.build))) live.add(info.build)
+      else hasUnmatchedLiveRuntime = true
     } catch { /* no runtime, or not running */ }
+  }
+  // A dev runtime can execute the freshly bundled runtime.cjs with a Node
+  // binary from an older install. Its runtime.json build then does not identify
+  // the install directory holding the live node.exe, so keep old installs.
+  if (hasUnmatchedLiveRuntime) {
+    console.log('[runtime] kept prior dev installs because a running runtime has no matching install directory')
+    return
   }
   const version = buildId.split('+')[0]
   for (const name of readdirSync(runtimeDir)) {
     if (name === buildId || live.has(name) || !name.startsWith(`${version}+`)) continue
-    rmSync(path.join(runtimeDir, name), { recursive: true, force: true })
+    try {
+      rmSync(path.join(runtimeDir, name), { recursive: true, force: true })
+    } catch (err) {
+      const code = err && typeof err === 'object' ? err.code : undefined
+      if (code === 'EPERM' || code === 'EBUSY' || code === 'ENOTEMPTY') {
+        console.warn(`[runtime] kept dev install ${name}; it could not be removed (${code})`)
+        continue
+      }
+      throw err
+    }
     console.log(`[runtime] removed unused dev install ${name}`)
   }
 }

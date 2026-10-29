@@ -19,7 +19,7 @@ import { ConnectionNotice } from '../sidebar/connectionStatus'
 import { AppearancePage } from './pages/AppearancePage'
 import { CanvasPage, WorkspaceCanvasPage } from './pages/CanvasPage'
 import { ShortcutsPage } from './pages/ShortcutsPage'
-import { BrowserPage, EditorPage, NotificationsPage, SidebarPage, TerminalPage, WorkspaceBrowserPage, WorkspaceTerminalPage } from './pages/clientPages'
+import { BrowserPage, EditorPage, NotificationsPage, SidebarPage, TerminalPage, WorkspaceBrowserPage, WorkspaceFilesPage, WorkspaceTerminalPage } from './pages/clientPages'
 import { registerSettingsPage, type SettingsPage, type SettingsPageProps } from './registry'
 
 function RuntimePage({ workspaceId }: SettingsPageProps): JSX.Element | null {
@@ -69,6 +69,7 @@ export const DEFAULT_SETTINGS_PAGES: readonly SettingsPage[] = [
   { id: 'workspace-terminal', title: 'Terminal', scope: 'workspace', group: 'tools', order: 10, component: WorkspaceTerminalPage },
   { id: 'workspace-browser', title: 'Browser', scope: 'workspace', group: 'tools', order: 20, component: WorkspaceBrowserPage },
   { id: 'workspace-canvas', title: 'Canvas', scope: 'workspace', group: 'tools', order: 30, component: WorkspaceCanvasPage },
+  { id: 'workspace-files', title: 'Files', scope: 'workspace', group: 'tools', order: 40, component: WorkspaceFilesPage },
   { id: 'worktrees', title: 'Worktrees', scope: 'workspace', group: 'sourceControl', order: 10, component: WorktreesPage },
   { id: 'github', title: 'GitHub', scope: 'workspace', group: 'sourceControl', order: 20, component: GitHubPage },
   { id: 'cli', title: 'CLI', scope: 'workspace', group: 'agents', order: 10, component: CliSettingsPage },

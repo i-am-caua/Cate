@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "id": "base-plan-big-execute-small",
+  "name": "Plan big, execute small (base)",
+  "source": "alethe",
+  "description": "Each tier on its usual model.",
+  "nodes": [
+    {
+      "id": "lead",
+      "agent": "claude-code",
+      "model": "opus",
+      "effort": "high",
+      "tier": "strong",
+      "title": "Orquestrador",
+      "orchestrator": true,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "Coordinate this playbook using the existing panels identified by setup node id.\nOnly the orchestrator dispatches work, using cate agent send; wait/read replies before deciding the next phase.\nEvaluate if/with branches, gates and first-matching rules; retain limits, then/after, quota and budget policies.\nA rescue phase reuses its assigned panel and session; never start a replacement executor for a continuation.\nConditional phases remain idle until their condition holds. Do not execute every phase as a linear sequence.\nWorker counts are capacity: dispatch only the units that need a phase, including individual rescue follow-ups.\nPanel model/effort are the baseline. If a rule needs a different model, report the required escalation before proceeding.\nWorktrees and read-only modes are requirements to enforce when dispatching, not evidence of sandbox enforcement.\nWorkflow (phase nodes reference the setup ids; map these to the launched panel ids):\n{\"budget\":{\"warnAt\":80,\"whenLow\":\"finish-and-report\"},\"next\":null,\"phases\":[{\"does\":\"Split the question into independent units and write one plain brief per unit that says what to return. Do not read the raw material yourself.\",\"id\":\"decompose\",\"nodes\":[\"lead\"],\"readOnly\":true,\"role\":\"planner\",\"tier\":\"strong\",\"who\":\"lead\"},{\"does\":\"One unit per worker, up to 8; never split one unit across several briefs.\",\"gate\":\"Every worker reported and the evidence supports each answer.\",\"id\":\"investigate\",\"nodes\":[\"investigate-1\",\"investigate-2\",\"investigate-3\",\"investigate-4\"],\"readOnly\":true,\"returns\":\"The answer, its evidence as file:line or URL, and what remains uncertain.\",\"role\":\"worker\",\"runner\":\"research\",\"tier\":\"standard\",\"workers\":4},{\"after\":\"investigate\",\"does\":\"Resume that worker's session with one focused question. After an infrastructure error, give the same brief to a fresh worker instead.\",\"id\":\"follow-up\",\"if\":\"report-weak\",\"limit\":\"One follow-up per unit.\",\"nodes\":[\"investigate-1\",\"investigate-2\",\"investigate-3\",\"investigate-4\"],\"readOnly\":true,\"role\":\"worker\",\"runner\":\"rescue\",\"then\":\"recheck\",\"tier\":\"standard\"},{\"does\":\"Wait for every report, then answer from the reports alone.\",\"id\":\"synthesize\",\"nodes\":[\"lead\"],\"readOnly\":true,\"role\":\"planner\",\"tier\":\"strong\",\"who\":\"lead\"}],\"playbook\":\"plan-big-execute-small\",\"principles\":[\"Do the work yourself when briefing a worker would cost more; delegation always has a floor cost.\",\"Spend the strong tier on decisions and the cheap tier on volume.\",\"Pin every worker's model and effort; a worker without them runs on its CLI's default model, which can be the most expensive one.\",\"Keep your context small; workers return answers, evidence and diffs, never transcripts.\",\"Split by independent unit and no finer; more, narrower briefs raised the bill in Anthropic's own run.\",\"Escalate on a failed check, never on a worker's own claim, one tier at a time and once per unit.\",\"Review a finished diff, never work in progress.\",\"Keep a worker's model and effort fixed for its whole session; switching discards its prompt cache.\",\"Use xhigh only to escalate, and avoid max.\",\"Cap every run with a budget and compare cost per finished task.\",\"Cheap models triage and skip; judging whether code is correct takes the standard tier or above.\",\"A risky unit never runs on the cheap tier, and its diff goes through review-gate.\"],\"profile\":\"base\",\"quota\":{\"criticalThreshold\":80,\"onBothCritical\":\"ask\",\"planEnds\":{},\"spareMinLeft\":30,\"spareWithinHours\":24,\"stopAt\":95,\"whenLow\":\"switch-provider\",\"whenSpare\":\"spend-strong\"}}"
+    },
+    {
+      "id": "investigate-1",
+      "agent": "claude-code",
+      "model": "sonnet",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "worker",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "One unit per worker, up to 8; never split one unit across several briefs."
+    },
+    {
+      "id": "investigate-2",
+      "agent": "claude-code",
+      "model": "sonnet",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "worker",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "One unit per worker, up to 8; never split one unit across several briefs."
+    },
+    {
+      "id": "investigate-3",
+      "agent": "claude-code",
+      "model": "sonnet",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "worker",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "One unit per worker, up to 8; never split one unit across several briefs."
+    },
+    {
+      "id": "investigate-4",
+      "agent": "claude-code",
+      "model": "sonnet",
+      "effort": "medium",
+      "tier": "standard",
+      "title": "worker",
+      "orchestrator": false,
+      "mode": "read-only",
+      "worktree": null,
+      "prompt": "One unit per worker, up to 8; never split one unit across several briefs."
+    }
+  ],
+  "edges": [
+    {
+      "from": "lead",
+      "to": "investigate-1",
+      "kind": "context",
+      "label": "worker"
+    },
+    {
+      "from": "lead",
+      "to": "investigate-2",
+      "kind": "context",
+      "label": "worker"
+    },
+    {
+      "from": "lead",
+      "to": "investigate-3",
+      "kind": "context",
+      "label": "worker"
+    },
+    {
+      "from": "lead",
+      "to": "investigate-4",
+      "kind": "context",
+      "label": "worker"
+    }
+  ],
+  "budget": {
+    "maxWorkers": 5
+  }
+}

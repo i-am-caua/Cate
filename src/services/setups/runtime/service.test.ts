@@ -99,6 +99,14 @@ describe('setups runtime', () => {
     expect(saved).toMatchObject({ id: 'renamed-flow', name: 'Renamed Flow', version: 1 })
   })
 
+  it('accepts null on model, effort, and tier', async () => {
+    const { service } = runtime()
+    const input = path.join(temporary, 'null-fields.json')
+    await fs.writeFile(input, JSON.stringify({ ...setup, id: 'null-fields', nodes: [{ ...setup.nodes[0], model: null, effort: null, tier: null }, setup.nodes[1]] }))
+    await expect(service.apiHandlers().save({ file: input, global: false }, context))
+      .resolves.toMatchObject({ ok: true, setupId: 'null-fields' })
+  })
+
   it('rejects invalid setup edges on import', async () => {
     const { service } = runtime()
     const input = path.join(temporary, 'invalid.json')
