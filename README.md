@@ -1,74 +1,64 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/cate-logo.svg" />
-    <img src="assets/cate-logo-light.svg" alt="Cate" width="140" />
-  </picture>
-</p>
+# Cate — Versão derivada para orquestração de agentes
 
-<p align="center">
-  <a href="README.md">English</a> | <a href="README.fr.md">Français</a> | <a href="README.zh-CN.md">简体中文</a> | <a href="README.de.md">Deutsch</a>
-</p>
+Versão derivada do [Cate, projeto open source de 0-AI-UG](https://github.com/0-AI-UG/cate), com funcionalidades e ajustes desenvolvidos por **Cauã Azevedo Santos**, com apoio de ferramentas de inteligência artificial.
 
-<p align="center">
-  An infinite canvas IDE for parallel coding agents.
-</p>
+O Cate original fornece um ambiente de trabalho com terminais, editores, navegador e agentes de programação em um canvas. Este repositório evolui essa base com foco na configuração e no uso de múltiplos agentes.
 
-<p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/0-AI-UG/cate?style=flat-square" alt="MIT License" /></a>
-  <a href="https://github.com/0-AI-UG/cate/actions"><img src="https://img.shields.io/github/actions/workflow/status/0-AI-UG/cate/ci.yml?style=flat-square" alt="CI" /></a>
-  <a href="https://github.com/0-AI-UG/cate/releases"><img src="https://img.shields.io/github/downloads/0-AI-UG/cate/total?style=flat-square" alt="Downloads" /></a>
-</p>
+## Alterações desta versão
 
----
+| Área | Funcionalidade ou melhoria | Registro |
+| --- | --- | --- |
+| Antigravity | Inclusão do agente `agy`, leitura de sessões e integração com eventos do seu ciclo de execução. | [Integração](https://github.com/i-am-caua/Cate/commit/711aff9ccc09700aa31be2f28082f24dc3f9ebda) · [Ajustes e testes](https://github.com/i-am-caua/Cate/commit/1aad66bb7ec3efa2795e329484f606206ded42ce) |
+| Configuração visual | Prévia em diagrama das configurações de agentes, com papéis, relações e seleção de modelo e nível de esforço nos agentes compatíveis. | [Implementação](https://github.com/i-am-caua/Cate/commit/972abaf063bcc47c4accd6f2fa6b6f57ed8534e2) |
+| Fluxo de execução | Inicialização dos agentes auxiliares antes do orquestrador e envio dos identificadores dos painéis no contexto da tarefa. | [Correção](https://github.com/i-am-caua/Cate/commit/6386b55bdf451eaf0ef5e0a2bd7ab39abfbf21fd) |
+| Alethe | Inclusão da Skill Alethe e de configurações de orquestração; ajustes na exportação e no reaproveitamento de sessões. | [Inclusão](https://github.com/i-am-caua/Cate/commit/972abaf063bcc47c4accd6f2fa6b6f57ed8534e2) · [Pull request](https://github.com/i-am-caua/Cate/pull/1) |
 
-<p align="center">
-  <img src="assets/demo-canvas.gif" alt="Cate demo" width="900" />
-</p>
+Essas alterações fazem parte desta versão derivada. A base do aplicativo, os recursos anteriores e suas respectivas autorias pertencem ao histórico do projeto original e de seus colaboradores.
 
-Run Claude Code, Codex, or any agent CLI in a Cate terminal and the canvas becomes mission control: every terminal shows whether its agent is working, finished, or waiting on you, and Cate notifies you the moment one needs input. One click spins up a git worktree with its own colored territory on the canvas, so five agents on five branches stay five visibly separate workstreams instead of a pile of tabs.
+## Exemplo de uso
 
-Open a folder and it becomes a workspace. No config files.
+Um fluxo de trabalho é preparar uma equipe de agentes, revisar seu diagrama, escolher modelos compatíveis e informar uma tarefa ao orquestrador. Os agentes auxiliares são criados antes do início dessa tarefa, permitindo que o orquestrador receba os identificadores reais dos painéis.
 
-<p align="center">
-  <em>Pst. Hey, you, join our stargazers :)</em>
-</p>
+O repositório contém um [exemplo de configuração para planejar e executar em etapas](skills/alethe/assets/setups/base-plan-big-execute-small.json) e [orientações da integração Alethe com o Cate](skills/alethe/references/cate.md).
 
-<p align="center">
-  <a href="https://github.com/0-AI-UG/cate"><img src="https://img.shields.io/github/stars/0-AI-UG/cate?style=social" alt="Star Cate on GitHub" /></a>
-</p>
+## Desenvolvimento com apoio de IA
 
-## Install
+Uso agentes e ferramentas de IA para apoiar a implementação e a evolução das funcionalidades. Os links acima permitem acompanhar as mudanças no código, os testes adicionados e o histórico de revisão.
 
-Download a prebuilt release. Don't build from source for daily use.
+A presença de testes no repositório não significa que todas as verificações estejam aprovadas. O estado de cada execução pode ser consultado em [Actions deste repositório](https://github.com/i-am-caua/Cate/actions).
 
-| Platform | Formats | Link |
-|----------|---------|------|
-| macOS | DMG, ZIP (`arm64`, `x64`) | [Latest release](https://github.com/0-AI-UG/cate/releases/latest) |
-| Windows | NSIS installer, ZIP (`x64`) | [Latest release](https://github.com/0-AI-UG/cate/releases/latest) |
-| Linux | AppImage, DEB, `tar.gz` (`x64`) | [Latest release](https://github.com/0-AI-UG/cate/releases/latest) |
+## Executar esta versão
 
-On macOS you can also install with Homebrew:
+O ambiente de desenvolvimento utiliza **Bun** e **Node.js 20 ou 22 LTS**. No Linux, a compilação de dependências nativas também requer Python 3 e uma ferramenta de compilação C++.
 
-```sh
-brew install --cask cate
+```bash
+git clone https://github.com/i-am-caua/Cate.git
+cd Cate
+bun run setup
+bun run dev
 ```
 
-## What's inside
+Os agentes externos precisam estar instalados e configurados para uso no ambiente. Consulte [CONTRIBUTING.md](CONTRIBUTING.md) para os requisitos completos e o funcionamento do runtime.
 
-- **Agent-aware terminals.** Supported agent CLIs report turn start, turn end, and permission prompts, so each panel shows running / waiting / finished and pings you when it needs an answer.
-- **Agent sessions survive restarts.** Reopen the project and terminals come back with their scrollback, each agent reattached with its own resume command.
-- **Worktrees for parallel branches.** Type what you're working on and Cate creates the worktree and branch, off a local branch, a remote branch, or an open PR.
-- **Panels on a canvas or in a dock.** Terminals, Monaco editors, browsers, PDF/image/DOCX viewers, nested canvases. Float, dock into tabs and splits, or detach into their own window. Layout persists per project.
-- **Git and search.** Multi-repo source control, git badges in the file tree, side-by-side diffs, ripgrep search, and `Cmd+K` for commands, panels, and files.
-- **A CLI agents can call.** In a Cate terminal, `cate` drives a browser panel, reads another terminal, opens files, manages panels.
-- **Local and remote are the same path.** Every workspace runs in its own runtime, on your machine or another one: terminals, git, search, and agents run there, and work keeps running when you close the window. Pair another device with a QR code or pairing code, on the same network or through Cate Connect, and it joins the same live workspace over an end-to-end encrypted connection.
+Os instaladores distribuídos pelo projeto original correspondem à versão original; para experimentar as alterações descritas aqui, utilize este código-fonte.
 
-Press `Cmd+K` for everything else. Shortcuts are rebindable in Settings.
+## Verificações disponíveis
 
-## Contributing
+```bash
+bun run typecheck
+bun run lint
+bun run lint:deps
+bun run test
+bun run build
+```
 
-Build-from-source instructions and the contribution workflow are in [CONTRIBUTING.md](CONTRIBUTING.md). Release history is in the [CHANGELOG](CHANGELOG.md).
+Há também testes de integração e de eventos dos agentes. Consulte os scripts em [package.json](package.json) para os comandos e os requisitos de cada suíte.
 
-## License
+## Créditos e licença
 
-[MIT](LICENSE)
+- **Projeto original:** [0-AI-UG/cate](https://github.com/0-AI-UG/cate).
+- **Contribuições destacadas nesta versão:** [i-am-caua](https://github.com/i-am-caua), com assistência de IA.
+- **Demais contribuições:** registradas no [histórico de commits](https://github.com/i-am-caua/Cate/commits/main/) e na [lista de colaboradores](https://github.com/i-am-caua/Cate/graphs/contributors).
+- **Licença:** [MIT](LICENSE), com preservação dos avisos e créditos do projeto original.
+
+A documentação e a apresentação da versão original estão disponíveis no [repositório de origem](https://github.com/0-AI-UG/cate#readme).
